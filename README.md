@@ -1,82 +1,191 @@
-# HyperOS ColorLightManager Research
+[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)   [![GitHub](https://img.shields.io/badge/GitHub-fan--world--me-181717?style=flat-square&logo=github)](https://github.com/fan-world-me)   [![Portfolio](https://img.shields.io/badge/Portfolio-fan--world--me.github.io-00e5ff?style=flat-square&logo=githubpages&logoColor=white)](https://fan-world-me.github.io/)
 
-Reverse-engineering the hidden Xiaomi/HyperOS API that controls the RGB
-ring around the rear camera on the POCO X8 Pro (and likely shared
-hardware on Redmi Turbo 5 / other `klee`-family devices).
+```
+ ██████╗ ██████╗  ██████╗     ██████╗ ██╗███╗   ██╗ ██████╗
+██╔══██╗██╔════╝ ██╔══██╗    ██╔══██╗██║████╗  ██║██╔════╝
+██████╔╝██║  ███╗██████╔╝    ██████╔╝██║██╔██╗ ██║██║  ███╗
+██╔══██╗██║   ██║██╔══██╗    ██╔══██╗██║██║╚██╗██║██║   ██║
+██║  ██║╚██████╔╝██████╔╝    ██║  ██║██║██║ ╚████║╚██████╔╝
+╚═╝  ╚═╝ ╚═════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+  HyperOS ColorLightManager Research — RGB camera ring API, no root
+```
 
-**Status: working, flicker-free.** A confirmed, end-to-end, on-device
-tested method for smoothly animating the ring in custom colors exists —
-see below. As far as we know this is the first publicly documented
-working method for this specific hardware.
+Reverse-engineering the hidden Xiaomi/HyperOS API that controls the RGB ring around the rear camera on **POCO X8 Pro** (and the same hardware on Redmi Turbo 5 / other `klee`-family devices).
 
-## TL;DR
+**Status: working, flicker-free.** A confirmed, end-to-end, on-device tested method for smoothly animating the ring in custom colors exists. As far as we know this is the first publicly documented working method for this specific hardware.
 
-```java
+### 💭 More about this research
+
+- 🔍 **Reverse-engineered** `miui-services.jar`, `miui-framework.jar`, `framework.jar` — decompiled via jadx, entirely on-device via Termux
+- 🔌 **No root required** — uses [Shizuku](https://shizuku.rikka.app/) (uid 2000 shell) as the Binder bridge
+- 🎨 **Confirmed flicker-free animation** — full rainbow sweep at 25ms update rate without gaps
+- 📡 **Blind Binder fuzzer** — independently verified the method table by brute-forcing transaction codes 1–20
+- 📱 **HaloLite PoC** — working Android app (Kotlin, foreground service) that drives a rainbow animation
+- 📚 **Full documentation** — API reference, Binder internals, findings, methodology, and a step-by-step research timeline
+
+---
+
+### ⚡ TL;DR — The Working Call
+
+```kotlin
 // via Shizuku, no root required — confirmed flicker-free at 25ms update rate
-IBinder raw = SystemServiceHelper.getSystemService("miui.lights.ILightsManager");
-ILightsManager lights = ILightsManager.Stub.asInterface(new ShizukuBinderWrapper(raw));
+val binder = ShizukuBinderWrapper(
+    SystemServiceHelper.getSystemService("miui.lights.ILightsManager")
+)
+val lights = ILightsManager.Stub.asInterface(binder)
 
 lights.setColorCommon(
-    0xFFFF0000,             // ARGB color, e.g. red
-    "com.android.camera",   // pkg — content doesn't matter for this method, no caller check
-    3,                       // styleType — "music rhythm" zone, same physical ring, no auto-off timer
-    0                        // userId
-);
+    0xFFFF0000.toInt(),    // ARGB color, e.g. red
+    "com.android.camera",  // pkg — no real caller check on this method
+    3,                     // styleType — "music rhythm" zone = same physical camera ring
+    0                      // userId
+)
 ```
 
-That's the whole working call — no timer race, safe to call every ~25ms
-for smooth animation. See `docs/FINDINGS.md` "UPDATE" section for why
-this beats the originally-found `setCustomLight`/`styleType=12` path.
+Call this every ~25ms in a loop for smooth animation — no flicker, no auto-off timer.
 
-## Repo layout
+---
+
+### 🧰 Tech Stack & Tools
+
+**Target device**
+![POCO X8 Pro](https://img.shields.io/badge/POCO_X8_Pro-klee-FF6900?style=flat-square)
+![HyperOS 3](https://img.shields.io/badge/HyperOS_3-Android_16_SDK_36-FF6900?style=flat-square)
+![AW21024](https://img.shields.io/badge/Awinic_AW21024-24ch_I²C_RGB-00e5ff?style=flat-square)
+
+**Research toolchain**
+![jadx](https://img.shields.io/badge/jadx-decompiler-181717?style=flat-square)
+![Shizuku](https://img.shields.io/badge/Shizuku-Binder_bridge-7C3AED?style=flat-square)
+![Termux](https://img.shields.io/badge/Termux-on--device_build-1D1D1D?style=flat-square)
+
+**HaloLite PoC**
+![Kotlin](https://img.shields.io/badge/Kotlin-Android-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
+![Android](https://img.shields.io/badge/Android-foreground_service-3DDC84?style=flat-square&logo=android&logoColor=white)
+![Gradle](https://img.shields.io/badge/Gradle-KTS-02303A?style=flat-square&logo=gradle&logoColor=white)
+
+---
+
+### 🗂️ Repo Layout
 
 ```
-docs/
-  API.md         — full method table, styleType values, timing notes
-  BINDER.md       — service registration, permission-check quirk, how to get the IBinder
-  FINDINGS.md     — hardware + component summary, confirmed dead ends
-  RESEARCH.md     — tools/methodology, Termux build gotchas, classloader collision warning
-  TIMELINE.md     — condensed step-by-step history of the investigation
-src/
-  main/java/miui/lights/ILightsManager.java
-                  — the real interface, annotated (reference only — see warning inside)
-examples/
-  lightsapi/ILightsManager.java
-                  — the SAME interface, safe to actually use (own package, no collision)
-  LightsBridge.kt — Shizuku binder bridge, minimal
-  HaloLightService.kt
-                  — working foreground-service example: full rainbow sweep on the ring
+hyperos-colorlightmanager-research/
+├── docs/
+│   ├── API.md         — full method table, styleType values, timing notes
+│   ├── BINDER.md      — service registration, permission-check quirk, 3 ways to get IBinder
+│   ├── FINDINGS.md    — hardware summary, confirmed working calls, known dead ends
+│   ├── RESEARCH.md    — tools/methodology, Termux build gotchas, classloader collision warning
+│   └── TIMELINE.md    — condensed step-by-step history of the investigation
+├── src/
+│   └── main/java/miui/lights/ILightsManager.java
+│                      — the real interface, annotated (reference only — do NOT use directly)
+├── examples/
+│   ├── lightsapi/ILightsManager.java
+│                      — same interface under your own package (safe to use — no classloader collision)
+│   ├── LightsBridge.kt— Shizuku binder bridge, minimal
+│   └── HaloLightService.kt
+│                      — working foreground-service example: full rainbow sweep
+├── halolite/          — full HaloLite Android app (Kotlin + Gradle)
+├── DISCLAIMER.md
+└── LICENSE
 ```
 
-## Quick start (if you just want to try it)
+---
 
-1. Install [Shizuku](https://shizuku.rikka.app/), start it (wireless
-   debugging or ADB, no root needed).
-2. Build a small app using `examples/lightsapi/ILightsManager.java` +
-   `examples/LightsBridge.kt` as a starting point — grant it Shizuku
-   permission at runtime.
-3. Call `LightsBridge.setCameraRing(color, onMs)` from anywhere.
+### 📡 API Reference — `miui.lights.ILightsManager`
 
-See `docs/RESEARCH.md` for the full toolchain notes (this was largely
-built and tested on-device via Termux, no computer required).
+| Code | Method | Signature | Works? |
+|---|---|---|---|
+| 1 | `setColorfulLight` | `(String pkg, int styleType, int userId)` | ⚠️ pre-baked XML animations only |
+| 2 | `setColorCommon` | `(int color, String pkg, int styleType, int userId)` | ✅ **use this** — no timer, flicker-free |
+| 3 | `setColorLed` | `(int color, String pkg, int styleType, int userId, int category)` | ❌ empty body, no-op |
+| 4 | `setCustomLight` | `(int color, int flashMode, int onMs, int offMs, int brightNessMode, String pkg, int styleType, int userId)` | ⚠️ works, but has auto-off timer causing flicker at high update rates |
 
-## Why this was hard
+**Key `styleType` values:**
 
-No public Xiaomi SDK or documentation exists for this feature. The only
-official-ish entry point (the "rhythmic light" music-reactive mode) only
-reacts to audio, not arbitrary custom colors. Getting from there to a
-working `setCustomLight` call meant decompiling three system jars,
-finding a permission-check inconsistency, and debugging several
-real on-device bugs along the way (see `docs/TIMELINE.md` for the full
-account, including a classic Java classloader collision that cost a full
-debugging cycle before being caught).
+| styleType | Meaning |
+|---|---|
+| 3 | music rhythm — same physical camera ring, no auto-off timer |
+| 12 | camera ring — LIGHTSTYLE_CAMERA |
+| 1 | incoming call |
+| 9 | notifications |
+| -1 | reset / clear |
 
-## Disclaimer
+---
 
-This uses an internal, undocumented, unsupported system API found via
-reverse engineering. It works on the specific firmware version this was
-tested against; Xiaomi can change or remove any of this in a future
-update without notice. Shizuku is required (a legitimate, widely-used
-tool); no root, no exploit, no modification of system files is involved
-— everything here is a normal signed app talking to a system service it
-was given permission to reach.
+### 🔬 How it works
+
+```
+[On-device research]
+        │
+        ├── pull system jars via Shizuku shell ────► jadx decompile
+        │   (miui-services.jar, framework.jar)
+        │
+        ├── service list | grep light ─────────────► find miui.lights.ILightsManager
+        │
+        ├── blind Binder fuzzer ────────────────────► confirm 4 methods on codes 1-4
+        │
+        └── test each method on-device ─────────────► setColorCommon(color, pkg, 3, 0)
+                                                               │
+                                                               ▼
+                                                   [camera ring lights up ✅]
+                                                   [25ms loop = smooth rainbow ✅]
+```
+
+---
+
+### 🚀 Quick Start
+
+1. Install [Shizuku](https://shizuku.rikka.app/) and start it via ADB / wireless debugging (no root needed)
+2. Use `examples/lightsapi/ILightsManager.java` + `examples/LightsBridge.kt` as your starting point
+3. Grant the app Shizuku permission at runtime
+4. Call `LightsBridge.setCameraRing(color, onMs)` from anywhere
+
+Or just use the full HaloLite app in the `halolite/` directory.
+
+```kotlin
+// minimal usage — rainbow sweep
+scope.launch {
+    var hue = 0f
+    while (true) {
+        lights.setColorCommon(Color.HSVToColor(floatArrayOf(hue, 1f, 1f)), "com.android.camera", 3, 0)
+        hue = (hue + 1.5f) % 360f
+        delay(25)
+    }
+}
+```
+
+---
+
+### ⚠️ Why `setCustomLight` causes flicker
+
+`setCustomLight` schedules a `Handler.sendMessageDelayed(msg, onMs + offMs)` on every call — an auto-off timer. At animation speed (every 25–60ms) this timer sometimes fires before the next call arrives, producing visible blink/off gaps.
+
+`setColorCommon` with `styleType=3` has **no timer at all** in its server-side implementation — it's an immediate unconditional state write. This is why it's the preferred call for smooth animation.
+
+---
+
+### 📖 Full Documentation
+
+| Doc | Contents |
+|---|---|
+| [`docs/API.md`](docs/API.md) | Complete method signatures, styleType table, timing notes |
+| [`docs/BINDER.md`](docs/BINDER.md) | Service registration, caller-check quirk, 3 ways to get IBinder |
+| [`docs/FINDINGS.md`](docs/FINDINGS.md) | Hardware, framework components, confirmed dead ends, UPDATE |
+| [`docs/RESEARCH.md`](docs/RESEARCH.md) | Tools, methodology, Termux notes, classloader collision warning |
+| [`docs/TIMELINE.md`](docs/TIMELINE.md) | Full step-by-step history of the investigation |
+
+---
+
+### 📄 License
+
+[GPL-3.0](LICENSE) © [fan-world-me](https://github.com/fan-world-me)
+
+> This uses an internal, undocumented, unsupported system API found via reverse engineering.  
+> No root, no exploit, no system file modification — only a normal signed app talking to a system service via Shizuku.  
+> Xiaomi can change or remove any of this without notice. See [DISCLAIMER.md](DISCLAIMER.md).
+
+---
+
+Made with 🩵 in Ukraine 🇺🇦
+
+[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)   [![Portfolio](https://img.shields.io/badge/Portfolio-fan--world--me.github.io-00e5ff?style=flat-square&logo=githubpages&logoColor=white)](https://fan-world-me.github.io/)
