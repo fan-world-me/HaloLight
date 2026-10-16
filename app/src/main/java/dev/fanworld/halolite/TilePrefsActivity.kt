@@ -1,5 +1,7 @@
 package dev.fanworld.halolite
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
@@ -15,6 +17,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -166,9 +169,15 @@ class TilePrefsActivity : Activity() {
         ).apply { topMargin = dp(10) })
 
         // ── Ритмичная подсветка ────────────────────────────────────────────
-        val syncBtn = SyncButtonView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
-                marginStart = dp(8)
+        val syncBtn = ImageView(this).apply {
+            setImageResource(R.drawable.ic_sync_anim)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setOnClickListener {
+                android.util.Log.d("HALO_SYNC", "CLICK OK")
+                loadMusicApps(musicContainer, this)
             }
         }
 
@@ -180,7 +189,9 @@ class TilePrefsActivity : Activity() {
             text("Ритмичная подсветка по приложениям", 14f, colDim),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        rhythmHeader.addView(syncBtn)
+        rhythmHeader.addView(syncBtn, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            marginStart = dp(10)
+        })
         panel.addView(rhythmHeader, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(28) })
@@ -190,7 +201,6 @@ class TilePrefsActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
 
-        syncBtn.onClickAction = { loadMusicApps(musicContainer, syncBtn) }
         loadMusicApps(musicContainer, syncBtn)
 
         root.addView(panel, FrameLayout.LayoutParams(
@@ -340,11 +350,32 @@ class TilePrefsActivity : Activity() {
     // ── Музыкальные приложения ───────────────────────────────────────────────
 
     private var syncInProgress = false
+    private var syncAnimator: ObjectAnimator? = null
 
-    private fun loadMusicApps(container: LinearLayout, syncBtn: SyncButtonView) {
+    private fun startSyncRotation(syncBtn: ImageView) {
+        android.util.Log.d("HALO_SYNC", "startSyncRotation called")
+        syncAnimator?.cancel()
+        syncAnimator = ObjectAnimator.ofFloat(syncBtn, "rotation", 0f, 360f).apply {
+            duration = 700
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+            start()
+        }
+        android.util.Log.d("HALO_SYNC", "animator started: ${syncAnimator?.isRunning}")
+    }
+
+    private fun stopSyncRotation(syncBtn: ImageView) {
+        syncAnimator?.cancel()
+        syncAnimator = null
+        syncBtn.rotation = 0f
+    }
+
+    private fun loadMusicApps(container: LinearLayout, syncBtn: ImageView) {
         if (syncInProgress) return
         syncInProgress = true
-        syncBtn.startSpin()
+
+        startSyncRotation(syncBtn)
 
         scope.launch {
             val apps = withContext(Dispatchers.IO) {
@@ -356,8 +387,11 @@ class TilePrefsActivity : Activity() {
                 }
             } else emptyMap()
 
-            syncBtn.stopSpin()
+            // минимум 800мс чтобы анимация была видна
+            kotlinx.coroutines.delay(800)
+
             syncInProgress = false
+            stopSyncRotation(syncBtn)
 
             container.removeAllViews()
             if (apps.isEmpty()) {
