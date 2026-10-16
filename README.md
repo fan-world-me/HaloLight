@@ -1,6 +1,13 @@
 [![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-7289DA?style=flat-square&logo=discord)](https://discord.gg/)
 
-# HaloLight
+```
+██████╗  █████╗ ██╗      ██████╗ ██╗     ██╗██╗ ██████╗███████╗
+██╔══██╗██╔══██╗██║     ██╔═══██╗██║     ██║██║██╔════╝██╔════╝
+██████╔╝███████║██║     ██║   ██║██║     ██║██║██║     ███████╗
+██╔══██╗██╔══██║██║     ██║   ██║██║     ██║██║██║      ╚════██║
+██║  ██║██║  ██║███████╗╚██████╔╝███████╗██║██║╚██████╗███████║
+╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚═╝╚═╝ ╚═════╝╚══════╝
+```
 
 HaloLight — RGB HaloLight API, no root
 
