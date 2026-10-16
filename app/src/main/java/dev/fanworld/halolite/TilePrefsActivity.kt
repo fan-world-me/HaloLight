@@ -1,6 +1,5 @@
 package dev.fanworld.halolite
 
-import android.animation.ObjectAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
@@ -346,15 +345,28 @@ class TilePrefsActivity : Activity() {
 
     // ── Музыкальные приложения ───────────────────────────────────────────────
 
-    private fun loadMusicApps(container: LinearLayout, syncBtn: TextView) {
-        // крутим ↻ пока идёт загрузка
-        val spin = ObjectAnimator.ofFloat(syncBtn, "rotation", 0f, 360f).apply {
-            duration = 600
-            repeatCount = ObjectAnimator.INFINITE
-            interpolator = LinearInterpolator()
-            start()
+    // флаг чтобы не запускать параллельные загрузки
+    private var syncInProgress = false
+
+    private fun spinStep(syncBtn: TextView, running: () -> Boolean) {
+        if (!running()) {
+            syncBtn.animate().rotation(0f).setDuration(150).setInterpolator(null).start()
+            return
         }
-        syncBtn.isEnabled = false
+        syncBtn.animate()
+            .rotationBy(360f)
+            .setDuration(600)
+            .setInterpolator(LinearInterpolator())
+            .withEndAction { spinStep(syncBtn, running) }
+            .start()
+    }
+
+    private fun loadMusicApps(container: LinearLayout, syncBtn: TextView) {
+        if (syncInProgress) return
+        syncInProgress = true
+
+        // запускаем анимацию через post — View уже в иерархии
+        syncBtn.post { spinStep(syncBtn) { syncInProgress } }
 
         scope.launch {
             val apps = withContext(Dispatchers.IO) {
@@ -366,10 +378,7 @@ class TilePrefsActivity : Activity() {
                 }
             } else emptyMap()
 
-            // останавливаем — доворачиваем до 0°
-            spin.cancel()
-            syncBtn.animate().rotation(0f).setDuration(150).start()
-            syncBtn.isEnabled = true
+            syncInProgress = false   // останавливает spinStep на следующем цикле
 
             container.removeAllViews()
             if (apps.isEmpty()) {

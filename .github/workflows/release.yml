@@ -13,9 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      VERSION_CODE: ${{ github.run_number }}
-      VERSION_NAME: "1.0.${{ github.run_number }}"
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +22,34 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
+
+      # Определяем следующую версию.
+      # Мажор всегда 2. Минор всегда 0.
+      # Patch = последний patch из релизов + 1, минимум 1.
+      # Пример: последний релиз 1.0.7 → следующий 2.0.1
+      #         последний релиз 2.0.3 → следующий 2.0.4
+      - name: Resolve version
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Получаем список всех релизов и ищем максимальный patch среди 2.0.X
+          # Если 2.0.X релизов ещё нет — patch будет 0, и мы поставим 1
+          LATEST_20_PATCH=$(gh release list --limit 50 --json tagName \
+            -q '[.[].tagName | ltrimstr("v") | select(startswith("2.0.")) | ltrimstr("2.0.") | tonumber] | max // 0')
+
+          NEXT_PATCH=$((LATEST_20_PATCH + 1))
+          # Минимум 1
+          if [ "$NEXT_PATCH" -lt 1 ]; then
+            NEXT_PATCH=1
+          fi
+
+          VERSION_NAME="2.0.${NEXT_PATCH}"
+          VERSION_CODE="$NEXT_PATCH"
+
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Resolved version: ${VERSION_NAME} (code ${VERSION_CODE})"
 
       - name: Decode keystore
         env:
