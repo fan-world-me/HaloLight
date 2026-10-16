@@ -84,7 +84,7 @@ hyperos-colorlightmanager-research/
 │   ├── LightsBridge.kt— Shizuku binder bridge, minimal
 │   └── HaloLightService.kt
 │                      — working foreground-service example: full rainbow sweep
-├── halolite/          — full HaloLite Android app (Kotlin + Gradle)
+├── app/               — integrated HaloLite Android application
 ├── DISCLAIMER.md
 └── LICENSE
 ```
@@ -140,7 +140,7 @@ hyperos-colorlightmanager-research/
 3. Grant the app Shizuku permission at runtime
 4. Call `LightsBridge.setCameraRing(color, onMs)` from anywhere
 
-The integrated HaloLite Android app now lives in the repository root (`app/`). The old `halolite/` directory is retained as the original research PoC snapshot.
+The integrated HaloLite Android app lives in `app/`; the older duplicate project copy has been removed.
 
 ```kotlin
 // minimal usage — rainbow sweep
