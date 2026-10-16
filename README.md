@@ -1,11 +1,19 @@
-# HyperOS ColorLightManager Research
+[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-7289DA?style=flat-square&logo=discord)](https://discord.gg/)
 
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![Gradle](https://img.shields.io/badge/Gradle-8.10.2-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
+```
+ ██████╗ ██████╗  ██████╗     ██████╗ ██╗███╗   ██╗ ██████╗
+██╔══██╗██╔════╝ ██╔══██╗    ██╔══██╗██║████╗  ██║██╔════╝
+██████╔╝██║  ███╗██████╔╝    ██████╔╝██║██╔██╗ ██║██║  ███╗
+██╔══██╗██║   ██║██╔══██╗    ██╔══██╗██║██║╚██╗██║██║   ██║
+██║  ██║╚██████╔╝██████╔╝    ██║  ██║██║██║ ╚████║╚██████╔╝
+╚═���  ╚═╝ ╚═════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+```
 
-Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder API, plus **HaloLite**, an Android app for controlling the RGB camera ring on supported POCO/Redmi devices.
+HaloLite — RGB camera ring API, no root
+
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/) [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/) [![Gradle](https://img.shields.io/badge/Gradle-8.10.2-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
+
+Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder API, plus HaloLite — an Android app for controlling the RGB camera ring on supported POCO/Redmi devices.
 
 > This is an independent community project, not affiliated with Xiaomi. Compatibility depends on the device and HyperOS build; undocumented system APIs can change without notice.
 
@@ -24,17 +32,17 @@ Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder 
 - Open the source repository from the app's settings.
 - Uses Shizuku as a shell/Binder bridge; **root is not required**.
 
-The app currently uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3` for its animation. The system lighting toggle and the animated color call are separate operations.
+The app currently uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3` for its animation. The system lighting toggle and the animated color routines are device- and firmware-dependent.
 
 ## Download
 
 Get the latest APK from **[GitHub Releases](https://github.com/fan-world-me/HyperOS-ColorLightManager-Research/releases)**.
 
-The automated release workflow names APKs like `HaloLite-v1.0.<run-number>.apk`. If the app is distributed with a debug signing key, Android will not treat it as an update to a build signed with a different key; uninstalling the old app may be necessary before installing a differently signed build.
+The automated release workflow names APKs like `HaloLite-v1.0.<run-number>.apk`. If the app is distributed with a debug signing key, Android will not treat it as an update to a build signed with a different key.
 
 ## Requirements and setup
 
-- An Android device with the relevant Xiaomi/HyperOS lighting service and compatible RGB camera-ring hardware. Research was conducted on a **POCO X8 Pro (`klee`) running HyperOS 3 / Android 16**; other devices and firmware versions are not guaranteed.
+- An Android device with the relevant Xiaomi/HyperOS lighting service and compatible RGB camera-ring hardware. Research was conducted on a **POCO X8 Pro (`klee`) running HyperOS 3 / Android 16**; results may vary on other devices.
 - [Shizuku](https://shizuku.rikka.app/) installed and running. Start it using wireless debugging or ADB; no root access is needed.
 - Grant HaloLite permission when prompted by Shizuku.
 
@@ -47,7 +55,7 @@ The automated release workflow names APKs like `HaloLite-v1.0.<run-number>.apk`.
 5. Tap the tile to toggle the system lighting setting. Long-press the tile to open duration settings.
 6. To run the rainbow animation, open HaloLite and choose **Start animation**. The app uses a foreground service while the animation runs.
 
-If the tile or animation does not work, confirm that Shizuku is running, HaloLite has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on other builds.
+If the tile or animation does not work, confirm that Shizuku is running, HaloLite has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
 
 ## Build from source
 
@@ -118,7 +126,7 @@ Workflow: [Build & Release](.github/workflows/release.yml)
 
 ## Research notes
 
-The system API is undocumented and its behavior is firmware-specific. The research documentation describes observed Binder transactions, style types, and known limitations; treat each result as tied to the tested build rather than a universal guarantee.
+The system API is undocumented and its behavior is firmware-specific. The research documentation describes observed Binder transactions, style types, and known limitations; treat each result as telemetry from tested devices rather than a universal guarantee.
 
 - [API reference](docs/API.md)
 - [Binder internals](docs/BINDER.md)
@@ -128,7 +136,7 @@ The system API is undocumented and its behavior is firmware-specific. The resear
 
 ## Disclaimer
 
-This project is provided **as is**, without warranty. It is intended for research and interoperability. It does not include proprietary Xiaomi firmware binaries and is not endorsed by Xiaomi. See [DISCLAIMER.md](DISCLAIMER.md).
+This project is provided **as is**, without warranty. It is intended for research and interoperability. It does not include proprietary Xiaomi firmware binaries and is not endorsed by Xiaomi.
 
 ## License
 
