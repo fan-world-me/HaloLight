@@ -14,7 +14,7 @@ class HaloTileService : TileService() {
         if (!StripLight.set(this, target)) {
             Toast.makeText(
                 this,
-                "Нет доступа: запусти Shizuku и открой HaloLite один раз",
+                "Нет доступа: запусти Shizuku и открой HaloLight один раз",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -25,7 +25,7 @@ class HaloTileService : TileService() {
         val tile = qsTile ?: return
         val on = StripLight.isOn(this)
         tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "HaloLite"
+        tile.label = "HaloLight"
         if (Build.VERSION.SDK_INT >= 29) {
             tile.subtitle = if (on) "Вкл" else "Выкл"
         }

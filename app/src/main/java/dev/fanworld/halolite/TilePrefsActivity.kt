@@ -20,7 +20,7 @@ object HaloPrefs {
     private const val FILE = "halolite"
     private const val KEY_DURATION = "duration_sec"
     const val DEFAULT_SEC = 5
-    const val GITHUB_URL = "https://github.com/fan-world-me/HyperOS-ColorLightManager-Research"
+    const val GITHUB_URL = "https://github.com/fan-world-me/HaloLight"
 
     fun durationSec(ctx: Context): Int =
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt(KEY_DURATION, DEFAULT_SEC)
@@ -80,7 +80,7 @@ class TilePrefsActivity : Activity() {
         })
 
         // заголовок
-        panel.addView(text("HaloLite", 26f, colText, bold = true))
+        panel.addView(text("HaloLight", 26f, colText, bold = true))
         panel.addView(text("RGB-кольцо камеры", 13f, colDim).also {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(2)
         })

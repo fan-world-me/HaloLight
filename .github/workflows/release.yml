@@ -48,13 +48,13 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk "HaloLite-v${VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "HaloLight-v${VERSION_NAME}.apk"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${VERSION_NAME}" "HaloLite-v${VERSION_NAME}.apk" \
-            --title "HaloLite v${VERSION_NAME}" \
+          gh release create "v${VERSION_NAME}" "HaloLight-v${VERSION_NAME}.apk" \
+            --title "HaloLight v${VERSION_NAME}" \
             --generate-notes \
             --target "${GITHUB_SHA}"

@@ -50,7 +50,7 @@ class MainActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "HaloLite"
+            text = "HaloLight"
             textSize = 30f
             setTextColor(Color.parseColor("#22D3EE"))
         })
@@ -87,7 +87,7 @@ class MainActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "Плитку добавь в шторке: карандаш → HaloLite.\nДолгое нажатие на плитку открывает настройки."
+            text = "Плитку добавь в шторке: карандаш → HaloLight.\nДолгое нажатие на плитку открывает настройки."
             textSize = 13f
             setTextColor(Color.parseColor("#9A9CB0"))
             setPadding(0, dp(24), 0, 0)
