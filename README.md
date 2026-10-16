@@ -1,19 +1,18 @@
-[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-7289DA?style=flat-square&logo=discord)](https://discord.gg/)
+[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)   [![GitHub](https://img.shields.io/badge/GitHub-fan--world--me-181717?style=flat-square&logo=github)](https://github.com/fan-world-me)   [![Portfolio](https://img.shields.io/badge/Portfolio-fan--world--me.github.io-00e5ff?style=flat-square&logo=githubpages&logoColor=white)](https://fan-world-me.github.io/)
 
 ```
-██████╗  █████╗ ██╗      ██████╗ ██╗     ██╗██╗ ██████╗███████╗
-██╔══██╗██╔══██╗██║     ██╔═══██╗██║     ██║██║██╔════╝██╔════╝
-██████╔╝███████║██║     ██║   ██║██║     ██║██║██║     ███████╗
-██╔══██╗██╔══██║██║     ██║   ██║██║     ██║██║██║      ╚════██║
-██║  ██║██║  ██║███████╗╚██████╔╝███████╗██║██║╚██████╗███████║
-╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚═╝╚═╝ ╚═════╝╚══════╝
+██╗  ██╗ █████╗ ██╗      ██████╗ ██╗     ██╗ ██████╗ ██╗  ██╗████████╗
+██║  ██║██╔══██╗██║     ██╔═══██╗██║     ██║██╔════╝ ██║  ██║╚══██╔══╝
+███████║███████║██║     ██║   ██║██║     ██║██║  ███╗███████║   ██║
+██╔══██║██╔══██║██║     ██║   ██║██║     ██║██║   ██║██╔══██║   ██║
+██║  ██║██║  ██║███████╗╚██████╔╝███████╗██║╚██████╔╝██║  ██║   ██║
+╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+  HaloLight — RGB HaloLight API, no root · POCO X8 Pro / Redmi Turbo 5
 ```
-
-HaloLight — RGB HaloLight API, no root
-
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/) [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/) [![Gradle](https://img.shields.io/badge/Gradle-8.10.2-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder API, plus HaloLight — an Android app for controlling HaloLight on supported POCO/Redmi devices.
+
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/) [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/) [![Gradle](https://img.shields.io/badge/Gradle-8.10.2-02303A?style=flat-square&logo=gradle&logoColor=white)](https://gradle.org/) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 > This is an independent community project, not affiliated with Xiaomi. Compatibility depends on the device and HyperOS build; undocumented system APIs can change without notice.
 
@@ -36,7 +35,7 @@ The app currently uses the `miui.lights.ILightsManager` Binder service and the `
 
 ## Download
 
-Get the latest APK from **[GitHub Releases](https://github.com/fan-world-me/HyperOS-ColorLightManager-Research/releases)**.
+Get the latest APK from **[GitHub Releases](https://github.com/fan-world-me/HaloLight/releases)**.
 
 The automated release workflow names APKs like `HaloLight-v1.0.<run-number>.apk`. If the app is distributed with a debug signing key, Android will not treat it as an update to a build signed with a different key.
 
@@ -144,4 +143,6 @@ This project is provided **as is**, without warranty. It is intended for researc
 
 ---
 
-Made in Ukraine 🇺🇦 · [GitHub profile](https://github.com/fan-world-me) · [Telegram](https://t.me/fan_world_me) · [Portfolio](https://fan-world-me.github.io/)
+Made with 🩵 in Ukraine 🇺🇦
+
+[![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)   [![Portfolio](https://img.shields.io/badge/Portfolio-fan--world--me.github.io-00e5ff?style=flat-square&logo=githubpages&logoColor=white)](https://fan-world-me.github.io/)
