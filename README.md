@@ -18,7 +18,7 @@ Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder 
 
 ## What is in this repository?
 
-- **HaloLight Android app** — Kotlin app with a Quick Settings tile, a short rainbow animation, and an animation-duration selector.
+- **HaloLight Android app** — Kotlin app with a Quick Settings tile, a short rainbow animation, an animation-duration selector, and per-app switches for the system's music-reactive ring effect.
 - **Binder/API research** — findings from inspecting HyperOS framework code and testing calls on-device.
 - **Reference examples** — a minimal Shizuku Binder bridge and interface definitions for developers.
 - **Build & release automation** — GitHub Actions builds the APK and publishes a versioned GitHub Release.
@@ -27,17 +27,18 @@ Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder 
 
 - Toggle the system HaloLight/strip lighting setting from a Quick Settings tile.
 - Run a rainbow animation on HaloLight.
-- Choose animation duration: **3, 5, 10, 15, or 30 seconds** (default: 5 seconds).
+- Choose animation duration: **3, 5, 10, 15, or 30 seconds** (default: 5 seconds), or a custom value.
+- **Rhythm lighting per app:** the long-press tile menu lists the installed music apps (Spotify, YouTube Music — the ReVanced build takes priority over the stock one — and SoundCloud) with a switch each. Turning a switch on enables the system's built-in music-reactive ring effect for that app. Details in [docs/RHYTHM.md](docs/RHYTHM.md).
 - Open the source repository from the app's settings.
 - Uses Shizuku as a shell/Binder bridge; **root is not required**.
 
-The app currently uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3` for its animation. The system lighting toggle and the animated color routines are device- and firmware-dependent.
+The animation uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3`. Rhythm lighting does not use Binder at all: it flips the system's per-app switch through `AudioManager.getParameters` / `setParameters` (key `Get_/Set_MusicLight_Package_State`) from the app's own process. The system lighting toggle and the animated color routines are device- and firmware-dependent.
 
 ## Download
 
 Get the latest APK from **[GitHub Releases](https://github.com/fan-world-me/HaloLight/releases)**.
 
-The automated release workflow names APKs like `HaloLight-v1.0.<run-number>.apk`. If the app is distributed with a debug signing key, Android will not treat it as an update to a build signed with a different key.
+The automated release workflow names APKs like `HaloLight-v2.0.<n>.apk`, where `<n>` is the previous release's patch number plus one. If the app is distributed with a debug signing key, Android will not treat it as an update to a build signed with a different key.
 
 ## Requirements and setup
 
@@ -51,10 +52,22 @@ The automated release workflow names APKs like `HaloLight-v1.0.<run-number>.apk`
 2. Install HaloLight from Releases.
 3. Open HaloLight once and tap **Request Shizuku access**; approve the request in Shizuku.
 4. Add **HaloLight** to Quick Settings (edit tiles in the notification shade).
-5. Tap the tile to toggle the system lighting setting. Long-press the tile to open duration settings.
+5. Tap the tile to toggle the system lighting setting. Long-press the tile to open the menu with duration settings and the rhythm switches.
 6. To run the rainbow animation, open HaloLight and choose **Start animation**. The app uses a foreground service while the animation runs.
 
-If the tile or animation does not work, confirm that Shizuku is running, HaloLite has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
+If the tile or animation does not work, confirm that Shizuku is running, HaloLight has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
+
+## Rhythm lighting at a glance
+
+```kotlin
+// read: "pkg1=true;pkg2=false;..." (all installed packages)
+audioManager.getParameters("Get_MusicLight_Package_State=")
+
+// write: the value is the literal string true or false (not 1/0)
+audioManager.setParameters("Set_MusicLight_Package_State=$pkg:true")
+```
+
+The write throws a `SecurityException` about `WRITE_SECURE_SETTINGS` on the test device but still takes effect, so re-read the state to confirm. Raw `service call media.audio_flinger ...` from the shell does **not** work for this. Full write-up: [docs/RHYTHM.md](docs/RHYTHM.md).
 
 ## Build from source
 
@@ -95,7 +108,7 @@ Do not commit real signing keys or passwords to the repository.
 
 Workflow: [Build & Release](.github/workflows/release.yml)
 
-- Runs on pushes to `main` that are not Markdown-only changes, and can be started manually from **Actions → Build & Release → Run workflow**.
+- Runs on pushes to `main` that are not Markdown-only changes (documentation commits do not create a release), and can be started manually from **Actions → Build & Release → Run workflow**.
 - Uses JDK 17 and the Gradle Wrapper.
 - If `KEYSTORE_BASE64` is configured in repository Actions secrets, the workflow decodes it and uses `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` for signing.
 - If no keystore secret is configured, the APK is debug-signed.
@@ -111,6 +124,7 @@ Workflow: [Build & Release](.github/workflows/release.yml)
 │   ├── BINDER.md                # Binder service access and details
 │   ├── FINDINGS.md              # Tested behavior and limitations
 │   ├── RESEARCH.md              # Research tools and methodology
+│   ├── RHYTHM.md                # Per-app rhythm lighting (AudioManager API)
 │   └── TIMELINE.md              # Research timeline
 ├── examples/
 │   ├── lightsapi/ILightsManager.java
@@ -130,6 +144,7 @@ The system API is undocumented and its behavior is firmware-specific. The resear
 - [API reference](docs/API.md)
 - [Binder internals](docs/BINDER.md)
 - [Findings and known limitations](docs/FINDINGS.md)
+- [Rhythm lighting (per-app music-reactive ring)](docs/RHYTHM.md)
 - [Research methodology](docs/RESEARCH.md)
 - [Timeline](docs/TIMELINE.md)
 
