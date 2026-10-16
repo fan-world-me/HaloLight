@@ -38,8 +38,8 @@ android {
         applicationId = "dev.fanworld.halolite"
         minSdk = 26
         targetSdk = 34
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 5
-        versionName = System.getenv("VERSION_NAME") ?: "1.0.5"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 6
+        versionName = System.getenv("VERSION_NAME") ?: "2.0.0"
     }
 
     signingConfigs {

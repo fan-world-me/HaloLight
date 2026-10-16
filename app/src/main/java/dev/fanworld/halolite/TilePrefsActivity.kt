@@ -1,5 +1,6 @@
 package dev.fanworld.halolite
 
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
@@ -15,6 +16,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -30,13 +32,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // ---------------------------------------------------------------------------
-// HaloPrefs — настройки приложения
+// HaloPrefs
 // ---------------------------------------------------------------------------
 
 object HaloPrefs {
     private const val FILE = "halolite"
     private const val KEY_DURATION = "duration_sec"
-    private const val KEY_CUSTOM_HISTORY = "custom_history"   // хранится как "10,45,120"
+    private const val KEY_CUSTOM_HISTORY = "custom_history"
     const val DEFAULT_SEC = 5
     const val GITHUB_URL = "https://github.com/fan-world-me/HaloLight"
     const val MAX_CUSTOM_HISTORY = 3
@@ -51,7 +53,6 @@ object HaloPrefs {
             .edit().putInt(KEY_DURATION, sec).apply()
     }
 
-    /** Последние MAX_CUSTOM_HISTORY кастомных значений, новые — в начале. */
     fun customHistory(ctx: Context): List<Int> {
         val raw = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getString(KEY_CUSTOM_HISTORY, "") ?: ""
@@ -61,8 +62,8 @@ object HaloPrefs {
 
     fun addCustomHistory(ctx: Context, sec: Int) {
         val list = customHistory(ctx).toMutableList()
-        list.remove(sec)           // убираем дубли
-        list.add(0, sec)           // новое — вперёд
+        list.remove(sec)
+        list.add(0, sec)
         val trimmed = list.take(MAX_CUSTOM_HISTORY)
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit().putString(KEY_CUSTOM_HISTORY, trimmed.joinToString(",")).apply()
@@ -70,28 +71,26 @@ object HaloPrefs {
 }
 
 // ---------------------------------------------------------------------------
-// TilePrefsActivity — bottom sheet: длительность, запуск, GitHub, ритм
+// TilePrefsActivity
 // ---------------------------------------------------------------------------
 
 class TilePrefsActivity : Activity() {
 
     private val presetOptions = listOf(3, 5, 10, 15, 30)
 
-    private val colPanel   = Color.parseColor("#1F2028")
-    private val colCard    = Color.parseColor("#12131A")
-    private val colAccent  = Color.parseColor("#22D3EE")
+    private val colPanel    = Color.parseColor("#1F2028")
+    private val colCard     = Color.parseColor("#12131A")
+    private val colAccent   = Color.parseColor("#22D3EE")
     private val colOnAccent = Color.parseColor("#06222A")
-    private val colText    = Color.parseColor("#ECEDF5")
-    private val colDim     = Color.parseColor("#9A9CB0")
-    private val colStroke  = Color.parseColor("#33FFFFFF")
+    private val colText     = Color.parseColor("#ECEDF5")
+    private val colDim      = Color.parseColor("#9A9CB0")
+    private val colStroke   = Color.parseColor("#33FFFFFF")
 
-    // все кнопки выбора секунд: пресет + кастомные из истории
     private val durationButtons = mutableMapOf<Int, TextView>()
-
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // контейнер музыкальных строк — нужен для ре-рендера при синхронизации
     private lateinit var musicContainer: LinearLayout
+    private lateinit var historyRowRef: LinearLayout
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -139,14 +138,13 @@ class TilePrefsActivity : Activity() {
         val current = HaloPrefs.durationSec(this)
         val history = HaloPrefs.customHistory(this)
 
-        // Строка пресетов + «+» для кастом
-        val presetRow = buildPresetRow(current)
-        panel.addView(presetRow, LinearLayout.LayoutParams(
+        panel.addView(buildPresetRow(), LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(14) })
 
-        // Строка кастомных значений из истории (если есть)
-        val historyRow = buildHistoryRow(current, history)
+        val historyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        historyRowRef = historyRow
+        rebuildHistoryRow(history, current)
         panel.addView(historyRow, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
@@ -157,9 +155,8 @@ class TilePrefsActivity : Activity() {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(10)
         })
 
-        // ── Кнопка «Запустить анимацию» ───────────────────────────────────
+        // ── Запустить анимацию ─────────────────────────────────────────────
         panel.addView(buildActionButton("Запустить анимацию") {
-            // запускаем сервис, НЕ закрываем меню
             startForegroundService(Intent(this, LightService::class.java))
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
@@ -170,8 +167,15 @@ class TilePrefsActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
         ).apply { topMargin = dp(10) })
 
-        // ── Ритмичная подсветка по приложениям ────────────────────────────
-        // Заголовок блока + кнопка «Синхронизировать»
+        // ── Ритмичная подсветка ────────────────────────────────────────────
+        val syncBtn = TextView(this).apply {
+            text = "↻"
+            textSize = 18f
+            setTextColor(colAccent)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, 0, 0)
+        }
+
         val rhythmHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -180,14 +184,6 @@ class TilePrefsActivity : Activity() {
             text("Ритмичная подсветка по приложениям", 14f, colDim),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        val syncBtn = TextView(this).apply {
-            text = "↻"
-            textSize = 18f
-            setTextColor(colAccent)
-            gravity = Gravity.CENTER
-            setPadding(dp(8), 0, 0, 0)
-            setOnClickListener { loadMusicApps(musicContainer) }
-        }
         rhythmHeader.addView(syncBtn, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ))
@@ -200,7 +196,9 @@ class TilePrefsActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
 
-        loadMusicApps(musicContainer)
+        // привязываем клик сюда, когда syncBtn уже создан
+        syncBtn.setOnClickListener { loadMusicApps(musicContainer, syncBtn) }
+        loadMusicApps(musicContainer, syncBtn)
 
         root.addView(panel, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -220,14 +218,12 @@ class TilePrefsActivity : Activity() {
         super.onDestroy()
     }
 
-    // ── Строка пресетов (3/5/10/15/30/[+]) ─────────────────────────────────
+    // ── Строка пресетов ─────────────────────────────────────────────────────
 
-    private fun buildPresetRow(current: Int): LinearLayout {
+    private fun buildPresetRow(): LinearLayout {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        presetOptions.forEach { sec ->
-            row.addView(buildDurationCell(sec, current))
-        }
-        // кнопка «+» — открыть диалог ввода кастомного значения
+        presetOptions.forEach { sec -> row.addView(buildDurationCell(sec)) }
+        // «+» — кастомное значение
         val plusCell = FrameLayout(this)
         val plusBtn = TextView(this).apply {
             text = "+"
@@ -247,30 +243,13 @@ class TilePrefsActivity : Activity() {
         return row
     }
 
-    // ── Строка кастомных значений из истории ────────────────────────────────
-
-    private lateinit var historyRowRef: LinearLayout
-
-    private fun buildHistoryRow(current: Int, history: List<Int>): LinearLayout {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        historyRowRef = row
-        rebuildHistoryRow(row, current, history)
-        return row
+    private fun rebuildHistoryRow(history: List<Int>, current: Int) {
+        historyRowRef.removeAllViews()
+        history.forEach { sec -> historyRowRef.addView(buildDurationCell(sec)) }
+        refreshDurationButtons(current)
     }
 
-    private fun rebuildHistoryRow(row: LinearLayout, current: Int, history: List<Int>) {
-        row.removeAllViews()
-        if (history.isEmpty()) return
-        history.forEach { sec ->
-            row.addView(buildDurationCell(sec, current))
-        }
-    }
-
-    // ── Ячейка кнопки длительности ──────────────────────────────────────────
-
-    private fun buildDurationCell(sec: Int, current: Int): FrameLayout {
+    private fun buildDurationCell(sec: Int): FrameLayout {
         val cell = FrameLayout(this)
         val btn = TextView(this).apply {
             text = sec.toString()
@@ -291,7 +270,7 @@ class TilePrefsActivity : Activity() {
         return cell
     }
 
-    // ── Диалог ввода кастомного значения ────────────────────────────────────
+    // ── Диалог кастомной длительности ───────────────────────────────────────
 
     private fun showCustomDialog() {
         val et = EditText(this).apply {
@@ -302,25 +281,15 @@ class TilePrefsActivity : Activity() {
             filters = arrayOf(InputFilter.LengthFilter(4))
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
-        val wrap = FrameLayout(this).apply {
-            setPadding(dp(20), dp(8), dp(20), 0)
-            addView(et)
-        }
         AlertDialog.Builder(this)
             .setTitle("Кастомная длительность")
-            .setView(wrap)
+            .setView(FrameLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(et) })
             .setPositiveButton("Применить") { _, _ ->
                 val v = et.text.toString().toIntOrNull()
                 if (v != null && v in 1..3600) {
                     HaloPrefs.addCustomHistory(this, v)
                     HaloPrefs.setDurationSec(this, v)
-                    // добавляем кнопку если ещё нет, перестраиваем историю
-                    if (v !in presetOptions) {
-                        val newHistory = HaloPrefs.customHistory(this)
-                        rebuildHistoryRow(historyRowRef, v, newHistory)
-                        // регистрируем кнопку в durationButtons если только что создана
-                    }
-                    refreshDurationButtons(v)
+                    rebuildHistoryRow(HaloPrefs.customHistory(this), v)
                 } else {
                     Toast.makeText(this, "Введите число от 1 до 3600", Toast.LENGTH_SHORT).show()
                 }
@@ -329,7 +298,7 @@ class TilePrefsActivity : Activity() {
             .show()
     }
 
-    // ── Кнопка-действие (общий стиль) ───────────────────────────────────────
+    // ── Кнопки действий ─────────────────────────────────────────────────────
 
     private fun buildActionButton(label: String, onClick: () -> Unit): TextView =
         TextView(this).apply {
@@ -339,9 +308,7 @@ class TilePrefsActivity : Activity() {
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                setColor(colCard)
-                setStroke(dp(1), colStroke)
-                cornerRadius = dp(18).toFloat()
+                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(18).toFloat()
             }
             setOnClickListener { onClick() }
         }
@@ -354,19 +321,16 @@ class TilePrefsActivity : Activity() {
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                setColor(colCard)
-                setStroke(dp(1), colStroke)
-                cornerRadius = dp(18).toFloat()
+                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(18).toFloat()
             }
             setOnClickListener {
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HaloPrefs.GITHUB_URL)))
-                } catch (_: ActivityNotFoundException) {}
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HaloPrefs.GITHUB_URL))) }
+                catch (_: ActivityNotFoundException) {}
                 finish()
             }
         }
 
-    // ── Логика кнопок длительности ──────────────────────────────────────────
+    // ── Длительность ────────────────────────────────────────────────────────
 
     private fun refreshDurationButtons(selected: Int) {
         durationButtons.forEach { (sec, tv) ->
@@ -382,7 +346,16 @@ class TilePrefsActivity : Activity() {
 
     // ── Музыкальные приложения ───────────────────────────────────────────────
 
-    private fun loadMusicApps(container: LinearLayout) {
+    private fun loadMusicApps(container: LinearLayout, syncBtn: TextView) {
+        // крутим ↻ пока идёт загрузка
+        val spin = ObjectAnimator.ofFloat(syncBtn, "rotation", 0f, 360f).apply {
+            duration = 600
+            repeatCount = ObjectAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            start()
+        }
+        syncBtn.isEnabled = false
+
         scope.launch {
             val apps = withContext(Dispatchers.IO) {
                 MusicLightManager.resolveApps(this@TilePrefsActivity)
@@ -393,16 +366,18 @@ class TilePrefsActivity : Activity() {
                 }
             } else emptyMap()
 
-            container.removeAllViews()
+            // останавливаем — доворачиваем до 0°
+            spin.cancel()
+            syncBtn.animate().rotation(0f).setDuration(150).start()
+            syncBtn.isEnabled = true
 
+            container.removeAllViews()
             if (apps.isEmpty()) {
                 container.addView(text("Подходящие приложения не найдены", 13f, colDim))
                 return@launch
             }
-
             apps.forEach { app ->
-                val enabled = states[app.pkg] ?: false
-                container.addView(buildMusicRow(app, enabled))
+                container.addView(buildMusicRow(app, states[app.pkg] ?: false))
             }
         }
     }
@@ -413,9 +388,7 @@ class TilePrefsActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
-                setColor(colCard)
-                setStroke(dp(1), colStroke)
-                cornerRadius = dp(12).toFloat()
+                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(12).toFloat()
             }
             setPadding(dp(14), dp(10), dp(14), dp(10))
             layoutParams = LinearLayout.LayoutParams(
@@ -423,13 +396,10 @@ class TilePrefsActivity : Activity() {
             ).apply { bottomMargin = dp(8) }
         }
 
-        val icon = ImageView(this).apply {
+        row.addView(ImageView(this).apply {
             setImageDrawable(app.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-        }
-        row.addView(icon, LinearLayout.LayoutParams(dp(36), dp(36)).apply {
-            marginEnd = dp(14)
-        })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(14) })
 
         row.addView(TextView(this).apply {
             text = app.label

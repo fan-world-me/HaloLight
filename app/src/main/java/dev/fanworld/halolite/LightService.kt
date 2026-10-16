@@ -20,10 +20,14 @@ import android.widget.Toast
  * Скорость всегда одинакова: BASE_DURATION_MS за полный спектр 720°.
  * При любой выбранной длительности кольцо крутит с той же скоростью,
  * просто дольше или короче. Кадр = FRAME_MS, шаг hue = HUE_PER_FRAME.
+ *
+ * Уведомление foreground-сервиса невидимое (IMPORTANCE_NONE) —
+ * пользователь его не видит. Toast показывается только при ошибке Shizuku.
  */
 class LightService : Service() {
 
     companion object {
+        private const val CHANNEL_ID = "halolite_anim"
         // Эталонная длительность одного прохода 720° — 5 секунд
         private const val BASE_DURATION_MS = 5_000L
         private const val FRAME_MS = 25L
@@ -40,6 +44,7 @@ class LightService : Service() {
         startAsForeground()
 
         if (!LightsBinder.hasPermission()) {
+            // Только здесь показываем уведомление пользователю — Shizuku недоступен
             Toast.makeText(this, "Shizuku не запущен или нет доступа", Toast.LENGTH_SHORT).show()
             finishSelf()
             return START_NOT_STICKY
@@ -90,10 +95,15 @@ class LightService : Service() {
 
     private fun startAsForeground() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
-            NotificationChannel("halolite", "HaloLight", NotificationManager.IMPORTANCE_LOW)
-        )
-        val n = Notification.Builder(this, "halolite")
+        // IMPORTANCE_NONE — канал существует (нужен для foreground-сервиса),
+        // но уведомление не появляется в шторке и не издаёт звук
+        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "HaloLight", NotificationManager.IMPORTANCE_NONE)
+                    .apply { setShowBadge(false) }
+            )
+        }
+        val n = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_tile)
             .setContentTitle("HaloLight")
             .setContentText("Анимация кольца")
@@ -103,5 +113,7 @@ class LightService : Service() {
         } else {
             startForeground(1, n)
         }
+        // Сразу убираем уведомление из шторки — foreground-сервис продолжает работать
+        stopForeground(STOP_FOREGROUND_DETACH)
     }
 }
