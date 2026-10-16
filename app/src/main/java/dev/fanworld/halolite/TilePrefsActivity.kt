@@ -15,7 +15,6 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -167,12 +166,10 @@ class TilePrefsActivity : Activity() {
         ).apply { topMargin = dp(10) })
 
         // ── Ритмичная подсветка ────────────────────────────────────────────
-        val syncBtn = TextView(this).apply {
-            text = "↻"
-            textSize = 18f
-            setTextColor(colAccent)
-            gravity = Gravity.CENTER
-            setPadding(dp(8), 0, 0, 0)
+        val syncBtn = SyncButtonView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
+                marginStart = dp(8)
+            }
         }
 
         val rhythmHeader = LinearLayout(this).apply {
@@ -183,9 +180,7 @@ class TilePrefsActivity : Activity() {
             text("Ритмичная подсветка по приложениям", 14f, colDim),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        rhythmHeader.addView(syncBtn, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        rhythmHeader.addView(syncBtn)
         panel.addView(rhythmHeader, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(28) })
@@ -195,8 +190,7 @@ class TilePrefsActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
 
-        // привязываем клик сюда, когда syncBtn уже создан
-        syncBtn.setOnClickListener { loadMusicApps(musicContainer, syncBtn) }
+        syncBtn.onClickAction = { loadMusicApps(musicContainer, syncBtn) }
         loadMusicApps(musicContainer, syncBtn)
 
         root.addView(panel, FrameLayout.LayoutParams(
@@ -345,28 +339,12 @@ class TilePrefsActivity : Activity() {
 
     // ── Музыкальные приложения ───────────────────────────────────────────────
 
-    // флаг чтобы не запускать параллельные загрузки
     private var syncInProgress = false
 
-    private fun spinStep(syncBtn: TextView, running: () -> Boolean) {
-        if (!running()) {
-            syncBtn.animate().rotation(0f).setDuration(150).setInterpolator(null).start()
-            return
-        }
-        syncBtn.animate()
-            .rotationBy(360f)
-            .setDuration(600)
-            .setInterpolator(LinearInterpolator())
-            .withEndAction { spinStep(syncBtn, running) }
-            .start()
-    }
-
-    private fun loadMusicApps(container: LinearLayout, syncBtn: TextView) {
+    private fun loadMusicApps(container: LinearLayout, syncBtn: SyncButtonView) {
         if (syncInProgress) return
         syncInProgress = true
-
-        // запускаем анимацию через post — View уже в иерархии
-        syncBtn.post { spinStep(syncBtn) { syncInProgress } }
+        syncBtn.startSpin()
 
         scope.launch {
             val apps = withContext(Dispatchers.IO) {
@@ -378,7 +356,8 @@ class TilePrefsActivity : Activity() {
                 }
             } else emptyMap()
 
-            syncInProgress = false   // останавливает spinStep на следующем цикле
+            syncBtn.stopSpin()
+            syncInProgress = false
 
             container.removeAllViews()
             if (apps.isEmpty()) {
