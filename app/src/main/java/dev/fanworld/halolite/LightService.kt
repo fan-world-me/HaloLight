@@ -14,8 +14,22 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.widget.Toast
 
-/** Играет радугу на кольце: красный → спектр → красный → спектр → красный. */
+/**
+ * Радужная анимация кольца.
+ *
+ * Скорость всегда одинакова: BASE_DURATION_MS за полный спектр 720°.
+ * При любой выбранной длительности кольцо крутит с той же скоростью,
+ * просто дольше или короче. Кадр = FRAME_MS, шаг hue = HUE_PER_FRAME.
+ */
 class LightService : Service() {
+
+    companion object {
+        // Эталонная длительность одного прохода 720° — 5 секунд
+        private const val BASE_DURATION_MS = 5_000L
+        private const val FRAME_MS = 25L
+        // Сколько градусов hue сдвигается за кадр при базовой скорости
+        private const val HUE_PER_FRAME = 720f * FRAME_MS / BASE_DURATION_MS  // = 3.6°/frame
+    }
 
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
@@ -38,20 +52,20 @@ class LightService : Service() {
         handler = h
 
         val durationMs = HaloPrefs.durationMs(this)
-        val start = SystemClock.uptimeMillis()
+        val endAt = SystemClock.uptimeMillis() + durationMs
         val pkg = packageName
+        var hue = 0f
 
         h.post(object : Runnable {
             override fun run() {
-                val p = (SystemClock.uptimeMillis() - start).toFloat() / durationMs
-                if (p >= 1f) {
+                if (SystemClock.uptimeMillis() >= endAt) {
                     LightsBinder.setColor(0, pkg)
                     finishSelf()
                     return
                 }
-                val hue = (p * 720f) % 360f
-                LightsBinder.setColor(Color.HSVToColor(floatArrayOf(hue, 1f, 1f)), pkg)
-                h.postDelayed(this, 25)
+                LightsBinder.setColor(Color.HSVToColor(floatArrayOf(hue % 360f, 1f, 1f)), pkg)
+                hue += HUE_PER_FRAME
+                h.postDelayed(this, FRAME_MS)
             }
         })
         return START_NOT_STICKY
@@ -77,11 +91,11 @@ class LightService : Service() {
     private fun startAsForeground() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel("halolite", "HaloLite", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel("halolite", "HaloLight", NotificationManager.IMPORTANCE_LOW)
         )
         val n = Notification.Builder(this, "halolite")
             .setSmallIcon(R.drawable.ic_tile)
-            .setContentTitle("HaloLite")
+            .setContentTitle("HaloLight")
             .setContentText("Анимация кольца")
             .build()
         if (Build.VERSION.SDK_INT >= 34) {

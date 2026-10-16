@@ -3,9 +3,32 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Подпись берётся из переменных окружения (GitHub Actions или локально):
-// KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
-val ksPath: String? = System.getenv("KEYSTORE_PATH")
+import java.util.Properties
+
+// Підпис: keystore.properties (локально), fan_world_me.jks або змінні оточення (CI)
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val ksPath: String? = keystoreProperties.getProperty("storeFile")
+    ?: System.getenv("KEYSTORE_PATH")
+    ?: if (rootProject.file("fan_world_me.jks").exists()) rootProject.file("fan_world_me.jks").absolutePath else null
+
+val ksPassword: String? = keystoreProperties.getProperty("storePassword")
+    ?: System.getenv("KEYSTORE_PASSWORD")
+
+val kAlias: String = keystoreProperties.getProperty("keyAlias")
+    ?: System.getenv("KEY_ALIAS")
+    ?: "fan_world_me"
+
+val kPassword: String? = keystoreProperties.getProperty("keyPassword")
+    ?: System.getenv("KEY_PASSWORD")
+    ?: ksPassword
+
+val hasReleaseSigning = !ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank()
 
 android {
     namespace = "dev.fanworld.halolite"
@@ -15,17 +38,18 @@ android {
         applicationId = "dev.fanworld.halolite"
         minSdk = 26
         targetSdk = 34
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 5
+        versionName = System.getenv("VERSION_NAME") ?: "1.0.5"
     }
 
     signingConfigs {
-        if (ksPath != null) {
+        if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(ksPath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
+                val resolvedFile = rootProject.file(ksPath!!)
+                storeFile = if (resolvedFile.exists()) resolvedFile else file(ksPath)
+                storePassword = ksPassword
+                keyAlias = kAlias
+                keyPassword = kPassword
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -37,8 +61,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // без ключа собираем debug-подписью, чтобы локальная сборка не падала
-            signingConfig = if (ksPath != null) signingConfigs.getByName("release")
+            // якщо заданий пароль та ключ, підписуємо релізним ключем; інакше debug для безпеки
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release")
             else signingConfigs.getByName("debug")
         }
     }
@@ -60,4 +84,5 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
