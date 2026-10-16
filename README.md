@@ -1,13 +1,6 @@
 [![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-7289DA?style=flat-square&logo=discord)](https://discord.gg/)
 
-```
- ██████╗ ██████╗  ██████╗     ██████╗ ██╗███╗   ██╗ ██████╗
-██╔══██╗██╔════╝ ██╔══██╗    ██╔══██╗██║████╗  ██║██╔════╝
-██████╔╝██║  ███╗██████╔╝    ██████╔╝██║██╔██╗ ██║██║  ███╗
-██╔══██╗██║   ██║██╔══██╗    ██╔══██╗██║██║╚██╗██║██║   ██║
-██║  ██║╚██████╔╝██████╔╝    ██║  ██║██║██║ ╚████║╚██████╔╝
-╚═���  ╚═╝ ╚═════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
-```
+# HaloLight
 
 HaloLight — RGB HaloLight API, no root
 
@@ -55,7 +48,7 @@ The automated release workflow names APKs like `HaloLight-v1.0.<run-number>.apk`
 5. Tap the tile to toggle the system lighting setting. Long-press the tile to open duration settings.
 6. To run the rainbow animation, open HaloLight and choose **Start animation**. The app uses a foreground service while the animation runs.
 
-If the tile or animation does not work, confirm that Shizuku is running, HaloLight has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
+If the tile or animation does not work, confirm that Shizuku is running, HaloLite has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
 
 ## Build from source
 
