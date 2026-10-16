@@ -14,3 +14,17 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Android / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.apks
+*.jks
+*.keystore
+keystore.properties

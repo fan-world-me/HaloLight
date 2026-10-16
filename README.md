@@ -140,7 +140,7 @@ hyperos-colorlightmanager-research/
 3. Grant the app Shizuku permission at runtime
 4. Call `LightsBridge.setCameraRing(color, onMs)` from anywhere
 
-Or just use the full HaloLite app in the `halolite/` directory.
+The integrated HaloLite Android app now lives in the repository root (`app/`). The old `halolite/` directory is retained as the original research PoC snapshot.
 
 ```kotlin
 // minimal usage — rainbow sweep
@@ -189,3 +189,23 @@ scope.launch {
 Made with 🩵 in Ukraine 🇺🇦
 
 [![Telegram](https://img.shields.io/badge/Telegram-@fan__world__me-2CA5E0?style=flat-square&logo=telegram)](https://t.me/fan_world_me)   [![Discord](https://img.shields.io/badge/Discord-fan__world__me-5865F2?style=flat-square&logo=discord)](https://discord.com/users/fan_world_me)   [![Portfolio](https://img.shields.io/badge/Portfolio-fan--world--me.github.io-00e5ff?style=flat-square&logo=githubpages&logoColor=white)](https://fan-world-me.github.io/)
+
+
+## 🛠️ HaloLite Android app (integrated)
+
+The repository now includes the standalone HaloLite Android application at the root, alongside the research documentation and examples.
+
+- **App source:** `app/` (Kotlin, Android SDK, Shizuku)
+- **Build system:** Gradle wrapper (`./gradlew` on Linux/macOS, `gradlew.bat` on Windows)
+- **CI/CD:** [GitHub Actions workflow](.github/workflows/release.yml) builds the release APK on pushes to `main` and can be run manually from the Actions tab.
+- **APK output:** `app/build/outputs/apk/release/app-release.apk`
+
+### Local build
+
+```bash
+./gradlew assembleRelease
+```
+
+For a release signed with your own key, configure the `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` environment variables. Do not commit a keystore or its passwords. GitHub Actions reads the corresponding repository Actions secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`). If the signing secrets are absent, the workflow falls back to a debug-signed APK, which is not suitable for publishing as a trusted production update.
+
+The workflow publishes versioned GitHub Releases (`v1.0.<run number>`). The `docs/` and `examples/` directories remain the reference material for the undocumented HyperOS Binder API.
