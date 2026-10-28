@@ -131,6 +131,29 @@ class TilePrefsActivity : Activity() {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(2)
         })
 
+        // ── Яркость кольца ─────────────────────────────────────────────────
+        panel.addView(text("Яркость кольца", 14f, colDim).also {
+            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(28)
+        })
+        val brightness = BrightnessSliderView(
+            this,
+            track = colCard,
+            fill = colAccent,
+            stroke = colStroke,
+            iconOn = colOnAccent,
+            iconOff = colDim,
+            textColor = colText,
+            initial = RingBrightness.get(this)
+        )
+        brightness.onCommit = { v ->
+            scope.launch(Dispatchers.IO) {
+                RingBrightness.applyAndRecover(applicationContext, v)
+            }
+        }
+        panel.addView(brightness, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(14) })
+
         // ── Длительность анимации ──────────────────────────────────────────
         panel.addView(text("Длительность анимации, сек", 14f, colDim).also {
             (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(28)
