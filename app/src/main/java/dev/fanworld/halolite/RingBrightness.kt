@@ -2,6 +2,7 @@ package dev.fanworld.halolite
 
 import android.content.Context
 import android.provider.Settings
+import kotlinx.coroutines.delay
 
 /**
  * Системная яркость кольца: Settings.Global lamp_effect_brightness (80..255).
@@ -9,9 +10,10 @@ import android.provider.Settings
  * Сервис HyperLightsService подставляет значение в альфа-байт цвета, поэтому
  * и наше переливание, и системные ритмичные эффекты идут с этой яркостью.
  *
- * Побочный эффект системы: при смене ключа кольцо на ~5 с вспыхивает белым и
- * перебивает текущую анимацию. [applyAndRecover] гасит белый сразу и
- * перезапускает ритмичные эффекты.
+ * Побочный эффект системы: при каждой смене ключа кольцо на ~5 с вспыхивает белым
+ * (это и есть живой предпросмотр яркости, как в настройках) и перебивает текущую
+ * анимацию. Во время перетаскивания пишем значение в реальном времени через [set],
+ * а когда палец отпущен — [recover] гасит белый и перезапускает ритмичные эффекты.
  */
 object RingBrightness {
     private const val KEY = "lamp_effect_brightness"
@@ -23,8 +25,9 @@ object RingBrightness {
 
     fun percent(v: Int): Int = ((v - MIN) * 100f / (MAX - MIN)).toInt().coerceIn(0, 100)
 
-    /** Пишет значение. Сначала напрямую (WRITE_SECURE_SETTINGS), иначе через shell Shizuku. */
-    private fun write(ctx: Context, v: Int): Boolean {
+    /** Пишет значение. Сначала напрямую (WRITE_SECURE_SETTINGS), иначе через shell Shizuku. Вне main-потока. */
+    fun set(ctx: Context, value: Int): Boolean {
+        val v = value.coerceIn(MIN, MAX)
         try {
             if (Settings.Global.putInt(ctx.contentResolver, KEY, v)) return true
         } catch (_: SecurityException) {
@@ -32,18 +35,21 @@ object RingBrightness {
         return StripLight.shell(arrayOf("settings", "put", "global", KEY, v.toString()))
     }
 
-    /** Вызывать вне главного потока. */
-    fun applyAndRecover(ctx: Context, value: Int) {
-        val v = value.coerceIn(MIN, MAX)
-        val changed = v != get(ctx)
-        if (!write(ctx, v) || !changed) return
-
+    /** Гасит белый предпросмотр и возвращает ритмичные эффекты. Вызывать вне main-потока. */
+    suspend fun recover(ctx: Context) {
         // onChange в сервисе зажигает белый и ставит таймер на 5 с — гасим сразу
-        Thread.sleep(300)
+        delay(300)
         LightsBinder.setColor(0, ctx.packageName)
+        restartRhythm(ctx)
 
-        // ритмичные эффекты сбиваются — перезапускаем включённые приложения
+        // системный таймер предпросмотра через ~5 с гасит кольцо ещё раз — перезапускаем после него
+        delay(5000)
+        restartRhythm(ctx)
+    }
+
+    private fun restartRhythm(ctx: Context) {
         val enabled = MusicLightManager.readStates(ctx).filterValues { it }.keys
+        if (enabled.isEmpty()) return
         MusicLightManager.resolveApps(ctx)
             .map { it.pkg }
             .filter { it in enabled }

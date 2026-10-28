@@ -27,8 +27,10 @@ import android.widget.TextView
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -71,6 +73,9 @@ object HaloPrefs {
     }
 }
 
+/** Запрос на запись яркости: recover = true, когда палец отпущен. */
+private class BrightnessReq(val value: Int, val recover: Boolean)
+
 // ---------------------------------------------------------------------------
 // TilePrefsActivity
 // ---------------------------------------------------------------------------
@@ -86,9 +91,15 @@ class TilePrefsActivity : Activity() {
     private val colText     = Color.parseColor("#ECEDF5")
     private val colDim      = Color.parseColor("#9A9CB0")
     private val colStroke   = Color.parseColor("#33FFFFFF")
+    private val colTonal    = Color.parseColor("#1D3F49")
 
     private val durationButtons = mutableMapOf<Int, TextView>()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // Яркость пишем в IO-скоупе, который не отменяется в onDestroy: если меню закрыли
+    // сразу после отпускания пальца, сброс белой вспышки всё равно должен доработать.
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val brightnessQueue = Channel<BrightnessReq>(Channel.CONFLATED)
 
     private lateinit var musicContainer: LinearLayout
     private lateinit var historyRowRef: LinearLayout
@@ -137,22 +148,26 @@ class TilePrefsActivity : Activity() {
         })
         val brightness = BrightnessSliderView(
             this,
-            track = colCard,
-            fill = colAccent,
-            stroke = colStroke,
-            iconOn = colOnAccent,
-            iconOff = colDim,
+            activeTrack = colAccent,
+            inactiveTrack = colTonal,
+            handleColor = colAccent,
+            iconOnActive = colOnAccent,
+            iconOnInactive = colAccent,
             textColor = colText,
             initial = RingBrightness.get(this)
         )
-        brightness.onCommit = { v ->
-            scope.launch(Dispatchers.IO) {
-                RingBrightness.applyAndRecover(applicationContext, v)
-            }
-        }
+        startBrightnessWriter()
+        // в реальном времени, пока тянем
+        brightness.onChanged = { v -> brightnessQueue.trySend(BrightnessReq(v, false)) }
+        // палец отпущен — финальное значение и сброс белой вспышки
+        brightness.onCommit = { v -> brightnessQueue.trySend(BrightnessReq(v, true)) }
         panel.addView(brightness, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(14) })
+        ).apply {
+            topMargin = dp(10)
+            marginStart = dp(16)
+            marginEnd = dp(16)
+        })
 
         // ── Длительность анимации ──────────────────────────────────────────
         panel.addView(text("Длительность анимации, сек", 14f, colDim).also {
@@ -241,7 +256,31 @@ class TilePrefsActivity : Activity() {
 
     override fun onDestroy() {
         scope.cancel()
+        // закрываем очередь: уже лежащий в ней последний запрос ещё будет обработан
+        brightnessQueue.close()
         super.onDestroy()
+    }
+
+    // ── Запись яркости ──────────────────────────────────────────────────────
+
+    private fun startBrightnessWriter() {
+        val ctx = applicationContext
+        ioScope.launch {
+            var dirty = false
+            var recoverJob: Job? = null
+            for (req in brightnessQueue) {
+                if (RingBrightness.get(ctx) != req.value) {
+                    // новая запись снова зажжёт белый — отложенный сброс устарел
+                    recoverJob?.cancel()
+                    if (RingBrightness.set(ctx, req.value)) dirty = true
+                }
+                if (req.recover && dirty) {
+                    dirty = false
+                    recoverJob?.cancel()
+                    recoverJob = launch { RingBrightness.recover(ctx) }
+                }
+            }
+        }
     }
 
     // ── Строка пресетов ─────────────────────────────────────────────────────
