@@ -27,7 +27,7 @@ object StripLight {
     fun grantSelf(ctx: Context): Boolean =
         shell(arrayOf("pm", "grant", ctx.packageName, "android.permission.WRITE_SECURE_SETTINGS"))
 
-    private fun shell(cmd: Array<String>): Boolean {
+    internal fun shell(cmd: Array<String>): Boolean {
         if (!LightsBinder.hasPermission()) return false
         return try {
             val m = Shizuku::class.java.getDeclaredMethod(
