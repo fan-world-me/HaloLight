@@ -4,21 +4,22 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
+import android.view.animation.PathInterpolator
 
-/** Пружинящая реакция на нажатие: быстро сжимаем, при отпускании отпружиниваем с перелётом. */
-fun View.bounceOnTouch(down: Float = 0.94f, glass: GlassDrawable? = null) {
+/** MD3 Expressive spring: fast compress, bouncy release with overshoot. */
+fun View.bounceOnTouch(down: Float = 0.92f, glass: GlassDrawable? = null) {
     setOnTouchListener { v, e ->
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 v.animate().cancel()
-                v.animate().scaleX(down).scaleY(down).setDuration(90)
+                v.animate().scaleX(down).scaleY(down).setDuration(80)
                     .setInterpolator(DecelerateInterpolator()).start()
                 glass?.pressTo(true)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 v.animate().cancel()
-                v.animate().scaleX(1f).scaleY(1f).setDuration(380)
-                    .setInterpolator(OvershootInterpolator(3.2f)).start()
+                v.animate().scaleX(1f).scaleY(1f).setDuration(420)
+                    .setInterpolator(OvershootInterpolator(3.6f)).start()
                 glass?.pressTo(false)
             }
         }
@@ -26,18 +27,18 @@ fun View.bounceOnTouch(down: Float = 0.94f, glass: GlassDrawable? = null) {
     }
 }
 
-/** Появление секции снизу вверх с задержкой (каскад). */
+/** Cascaded entrance from below — expressive ease-out. */
 fun View.enterFromBelow(delayMs: Long, distancePx: Float) {
     alpha = 0f
     translationY = distancePx
-    animate().alpha(1f).translationY(0f).setStartDelay(delayMs).setDuration(460)
-        .setInterpolator(DecelerateInterpolator(2.2f)).start()
+    animate().alpha(1f).translationY(0f).setStartDelay(delayMs).setDuration(520)
+        .setInterpolator(PathInterpolator(0.2f, 0.9f, 0.2f, 1f)).start()
 }
 
-/** «Поп»-появление: из маленького масштаба с перелётом. */
+/** Pop-in with strong overshoot (MD3 Expressive). */
 fun View.popIn(delayMs: Long) {
-    scaleX = 0.4f
-    scaleY = 0.4f
-    animate().scaleX(1f).scaleY(1f).setStartDelay(delayMs).setDuration(560)
-        .setInterpolator(OvershootInterpolator(2.6f)).start()
+    scaleX = 0.35f
+    scaleY = 0.35f
+    animate().scaleX(1f).scaleY(1f).setStartDelay(delayMs).setDuration(620)
+        .setInterpolator(OvershootInterpolator(2.9f)).start()
 }
