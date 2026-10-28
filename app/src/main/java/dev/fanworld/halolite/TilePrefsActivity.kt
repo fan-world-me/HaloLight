@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputFilter
@@ -17,11 +19,14 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AccelerateInterpolator
 import android.view.animation.LinearInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -76,6 +81,11 @@ object HaloPrefs {
 /** Запрос на запись яркости: recover = true, когда палец отпущен. */
 private class BrightnessReq(val value: Int, val recover: Boolean)
 
+/** Кнопка длительности: число, её «стекло» и текущее состояние выбора. */
+private class Chip(val sec: Int, val tv: TextView, val glass: GlassDrawable) {
+    var on = false
+}
+
 // ---------------------------------------------------------------------------
 // TilePrefsActivity
 // ---------------------------------------------------------------------------
@@ -84,47 +94,78 @@ class TilePrefsActivity : Activity() {
 
     private val presetOptions = listOf(3, 5, 10, 15, 30)
 
-    private val colPanel    = Color.parseColor("#1F2028")
     private val colCard     = Color.parseColor("#12131A")
     private val colAccent   = Color.parseColor("#22D3EE")
     private val colOnAccent = Color.parseColor("#06222A")
     private val colText     = Color.parseColor("#ECEDF5")
     private val colDim      = Color.parseColor("#9A9CB0")
     private val colStroke   = Color.parseColor("#33FFFFFF")
-    private val colTonal    = Color.parseColor("#1D3F49")
 
-    private val durationButtons = mutableMapOf<Int, TextView>()
+    private val matchP = ViewGroup.LayoutParams.MATCH_PARENT
+    private val wrapC = ViewGroup.LayoutParams.WRAP_CONTENT
+
+    private val presetChips = mutableListOf<Chip>()
+    private val historyChips = mutableListOf<Chip>()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Яркость пишем в IO-скоупе, который не отменяется в onDestroy: если меню закрыли
-    // сразу после отпускания пальца, сброс белой вспышки всё равно должен доработать.
+    // Яркость пишем в IO-скоупе, который не отменяется в onDestroy: если меню закрыли сразу
+    // после отпускания пальца, сброс белой вспышки всё равно должен доработать.
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val brightnessQueue = Channel<BrightnessReq>(Channel.CONFLATED)
 
     private lateinit var musicContainer: LinearLayout
     private lateinit var historyRowRef: LinearLayout
+    private lateinit var panelRef: View
+    private lateinit var scrimRef: View
+    private lateinit var ringRef: HaloRingView
+    private var dismissing = false
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dpf(v: Float) = v * resources.displayMetrics.density
+    private fun den() = resources.displayMetrics.density
 
     // -----------------------------------------------------------------------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#88000000"))
-            setOnClickListener { finish() }
-        }
+        val root = FrameLayout(this)
 
-        val r = dp(28).toFloat()
+        val scrim = View(this).apply {
+            setBackgroundColor(Color.parseColor("#99000000"))
+            alpha = 0f
+            setOnClickListener { dismiss() }
+        }
+        scrimRef = scrim
+        root.addView(scrim, FrameLayout.LayoutParams(matchP, matchP))
+
+        // фон панели: вертикальный градиент + бирюзовое свечение сверху
+        val rad = dpf(32f)
+        val radii = floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
+        val base = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.parseColor("#2A2C3E"), Color.parseColor("#191A25"))
+        )
+        base.cornerRadii = radii
+        base.setStroke(dp(1), Color.parseColor("#26FFFFFF"))
+        val halo = GradientDrawable()
+        halo.setGradientType(GradientDrawable.RADIAL_GRADIENT)
+        halo.setGradientRadius(dpf(320f))
+        halo.setGradientCenter(0.5f, 0f)
+        halo.setColors(intArrayOf(Color.parseColor("#3322D3EE"), Color.TRANSPARENT))
+        halo.cornerRadii = radii
+
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(12), dp(24), dp(32))
-            background = GradientDrawable().apply {
-                setColor(colPanel)
-                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
-            }
+            setPadding(dp(24), dp(14), dp(24), dp(28))
+            background = LayerDrawable(arrayOf<Drawable>(base, halo))
             isClickable = true
+        }
+
+        val sections = mutableListOf<View>()
+        fun addSection(v: View, top: Int) {
+            panel.addView(v, LinearLayout.LayoutParams(matchP, wrapC).apply { topMargin = top })
+            sections.add(v)
         }
 
         // ручка
@@ -133,78 +174,98 @@ class TilePrefsActivity : Activity() {
                 setColor(colStroke); cornerRadius = dp(2).toFloat()
             }
         }, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(20)
+            gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(18)
         })
 
-        // заголовок
-        panel.addView(text("HaloLight", 26f, colText, bold = true))
-        panel.addView(text("RGB-кольцо камеры", 13f, colDim).also {
-            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(2)
-        })
+        // ── Шапка ──────────────────────────────────────────────────────────
+        val ring = HaloRingView(this)
+        ringRef = ring
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(ring, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(text("HaloLight", 26f, colText, bold = true))
+        titles.addView(text("RGB-кольцо камеры", 13f, colDim))
+        header.addView(titles, LinearLayout.LayoutParams(wrapC, wrapC).apply { marginStart = dp(14) })
+        addSection(header, 0)
 
         // ── Яркость кольца ─────────────────────────────────────────────────
-        panel.addView(text("Яркость кольца", 14f, colDim).also {
-            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(28)
-        })
-        val brightness = BrightnessSliderView(
+        val bSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val bRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val sun = SunView(this, colAccent)
+        bRow.addView(sun, LinearLayout.LayoutParams(dp(28), dp(28)))
+        bRow.addView(TextView(this).apply {
+            text = "Яркость кольца"
+            textSize = 14f
+            setTextColor(colDim)
+        }, LinearLayout.LayoutParams(0, wrapC, 1f).apply { marginStart = dp(10) })
+        val percentTv = TextView(this).apply {
+            textSize = 16f
+            setTextColor(colAccent)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        bRow.addView(percentTv, LinearLayout.LayoutParams(wrapC, wrapC))
+        bSection.addView(bRow, LinearLayout.LayoutParams(matchP, wrapC))
+
+        val slider = BrightnessSliderView(
             this,
-            activeTrack = colAccent,
-            inactiveTrack = colTonal,
-            handleColor = colAccent,
-            iconOnActive = colOnAccent,
-            iconOnInactive = colAccent,
-            textColor = colText,
+            trackColor = Color.parseColor("#16323B"),
+            fillStart = Color.parseColor("#1798B0"),
+            fillEnd = colAccent,
+            thumbColor = Color.parseColor("#CFF6FF"),
             initial = RingBrightness.get(this)
         )
+        fun showBrightness(v: Int) {
+            percentTv.text = "${RingBrightness.percent(v)}%"
+            sun.setLevel((v - RingBrightness.MIN).toFloat() / (RingBrightness.MAX - RingBrightness.MIN))
+        }
+        showBrightness(slider.value)
         startBrightnessWriter()
         // в реальном времени, пока тянем
-        brightness.onChanged = { v -> brightnessQueue.trySend(BrightnessReq(v, false)) }
+        slider.onChanged = { v ->
+            showBrightness(v)
+            brightnessQueue.trySend(BrightnessReq(v, false))
+        }
         // палец отпущен — финальное значение и сброс белой вспышки
-        brightness.onCommit = { v -> brightnessQueue.trySend(BrightnessReq(v, true)) }
-        panel.addView(brightness, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply {
-            topMargin = dp(10)
-            marginStart = dp(16)
-            marginEnd = dp(16)
+        slider.onCommit = { v -> brightnessQueue.trySend(BrightnessReq(v, true)) }
+        bSection.addView(slider, LinearLayout.LayoutParams(matchP, wrapC).apply {
+            topMargin = dp(12)
+            marginStart = dp(10)
+            marginEnd = dp(10)
         })
+        addSection(bSection, dp(26))
 
         // ── Длительность анимации ──────────────────────────────────────────
-        panel.addView(text("Длительность анимации, сек", 14f, colDim).also {
-            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(28)
-        })
-
         val current = HaloPrefs.durationSec(this)
         val history = HaloPrefs.customHistory(this)
 
-        panel.addView(buildPresetRow(), LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(14) })
-
-        val historyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        historyRowRef = historyRow
-        rebuildHistoryRow(history, current)
-        panel.addView(historyRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(8) })
-
-        refreshDurationButtons(current)
-
-        panel.addView(text("По умолчанию: ${HaloPrefs.DEFAULT_SEC} сек", 12f, colDim).also {
-            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(10)
+        val dSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        dSection.addView(text("Длительность анимации, сек", 14f, colDim))
+        dSection.addView(buildPresetRow(), LinearLayout.LayoutParams(matchP, wrapC).apply {
+            topMargin = dp(10)
         })
+        historyRowRef = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        dSection.addView(historyRowRef, LinearLayout.LayoutParams(matchP, wrapC))
+        dSection.addView(text("По умолчанию: ${HaloPrefs.DEFAULT_SEC} сек", 12f, colDim).also {
+            (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(6)
+        })
+        rebuildHistoryRow(history, current)
+        refreshDurationButtons(current, true)
+        addSection(dSection, dp(24))
 
-        // ── Запустить анимацию ─────────────────────────────────────────────
-        panel.addView(buildActionButton("Запустить анимацию") {
+        // ── Кнопки ─────────────────────────────────────────────────────────
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        buttons.addView(buildPrimaryButton("Запустить анимацию") {
+            ringRef.pulse()
             startForegroundService(Intent(this, LightService::class.java))
-        }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
-        ).apply { topMargin = dp(20) })
-
-        // ── GitHub ────────────────────────────────────────────────────────
-        panel.addView(buildGithubButton(), LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
-        ).apply { topMargin = dp(10) })
+        }, LinearLayout.LayoutParams(matchP, dp(60)))
+        buttons.addView(buildGithubButton(), LinearLayout.LayoutParams(matchP, dp(60)))
+        addSection(buttons, dp(14))
 
         // ── Ритмичная подсветка ────────────────────────────────────────────
         val syncBtn = ImageView(this).apply {
@@ -217,41 +278,66 @@ class TilePrefsActivity : Activity() {
                 android.util.Log.d("HALO_SYNC", "CLICK OK")
                 loadMusicApps(musicContainer, this)
             }
+            bounceOnTouch(0.85f)
         }
 
+        val rhythm = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val rhythmHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         rhythmHeader.addView(
             text("Ритмичная подсветка по приложениям", 14f, colDim),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            LinearLayout.LayoutParams(0, wrapC, 1f)
         )
         rhythmHeader.addView(syncBtn, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
             marginStart = dp(10)
         })
-        panel.addView(rhythmHeader, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(28) })
-
+        rhythm.addView(rhythmHeader, LinearLayout.LayoutParams(matchP, wrapC))
         musicContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        panel.addView(musicContainer, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(8) })
+        rhythm.addView(musicContainer, LinearLayout.LayoutParams(matchP, wrapC).apply {
+            topMargin = dp(8)
+        })
+        addSection(rhythm, dp(22))
 
         loadMusicApps(musicContainer, syncBtn)
 
-        root.addView(panel, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM
-        ))
+        // ── Сборка и вход ──────────────────────────────────────────────────
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        scroll.addView(panel, FrameLayout.LayoutParams(matchP, wrapC))
+        panelRef = scroll
+        root.addView(scroll, FrameLayout.LayoutParams(matchP, wrapC, Gravity.BOTTOM))
         setContentView(root)
 
-        panel.post {
-            panel.translationY = panel.height.toFloat()
-            panel.animate().translationY(0f).setDuration(220).start()
+        sections.forEach { it.alpha = 0f }
+        scroll.post {
+            scroll.translationY = scroll.height.toFloat()
+            scroll.animate().translationY(0f).setDuration(520)
+                .setInterpolator(OvershootInterpolator(0.8f)).start()
+            scrim.animate().alpha(1f).setDuration(300).start()
+            sections.forEachIndexed { i, v -> v.enterFromBelow(140L + i * 60L, dpf(26f)) }
+            ring.popIn(220)
         }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        dismiss()
+    }
+
+    private fun dismiss() {
+        if (dismissing) return
+        dismissing = true
+        scrimRef.animate().alpha(0f).setDuration(240).start()
+        panelRef.animate().translationY(panelRef.height.toFloat()).setDuration(240)
+            .setInterpolator(AccelerateInterpolator())
+            .withEndAction {
+                finish()
+                overridePendingTransition(0, 0)
+            }.start()
     }
 
     override fun onDestroy() {
@@ -287,52 +373,66 @@ class TilePrefsActivity : Activity() {
 
     private fun buildPresetRow(): LinearLayout {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        presetOptions.forEach { sec -> row.addView(buildDurationCell(sec)) }
+        presetChips.clear()
+        presetOptions.forEach { sec -> row.addView(buildDurationCell(sec, presetChips)) }
+
         // «+» — кастомное значение
         val plusCell = FrameLayout(this)
+        val glass = GlassDrawable(den(), colAccent, dpf(24f), dpf(24f), dpf(4f))
         val plusBtn = TextView(this).apply {
             text = "+"
-            textSize = 18f
+            textSize = 22f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
             setTextColor(colAccent)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(colCard)
-                setStroke(dp(1), colStroke)
-            }
+            background = glass
             setOnClickListener { showCustomDialog() }
+            bounceOnTouch(0.9f, glass)
         }
-        plusCell.addView(plusBtn, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER))
-        row.addView(plusCell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        plusCell.addView(plusBtn, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
+        row.addView(plusCell, LinearLayout.LayoutParams(0, wrapC, 1f))
         return row
     }
 
     private fun rebuildHistoryRow(history: List<Int>, current: Int) {
         historyRowRef.removeAllViews()
-        history.forEach { sec -> historyRowRef.addView(buildDurationCell(sec)) }
-        refreshDurationButtons(current)
+        historyChips.clear()
+        history.forEach { sec -> historyRowRef.addView(buildDurationCell(sec, historyChips)) }
+        refreshDurationButtons(current, true)
     }
 
-    private fun buildDurationCell(sec: Int): FrameLayout {
+    private fun buildDurationCell(sec: Int, into: MutableList<Chip>): FrameLayout {
         val cell = FrameLayout(this)
+        // круг -> при выборе морфится в скруглённый квадрат со свечением
+        val glass = GlassDrawable(den(), colAccent, dpf(24f), dpf(16f), dpf(4f))
         val btn = TextView(this).apply {
             text = sec.toString()
             textSize = if (sec >= 100) 13f else 18f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
+            setTextColor(colText)
+            background = glass
             setOnClickListener {
                 HaloPrefs.setDurationSec(this@TilePrefsActivity, sec)
-                refreshDurationButtons(sec)
-                animate().scaleX(0.88f).scaleY(0.88f).setDuration(70).withEndAction {
-                    animate().scaleX(1f).scaleY(1f).setDuration(110).start()
-                }.start()
+                refreshDurationButtons(sec, true)
+            }
+            bounceOnTouch(0.88f, glass)
+        }
+        into.add(Chip(sec, btn, glass))
+        cell.addView(btn, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
+        cell.layoutParams = LinearLayout.LayoutParams(0, wrapC, 1f)
+        return cell
+    }
+
+    private fun refreshDurationButtons(selected: Int, animate: Boolean) {
+        (presetChips + historyChips).forEach { chip ->
+            val on = chip.sec == selected
+            chip.tv.setTextColor(if (on) colOnAccent else colText)
+            if (chip.on != on || !animate) {
+                chip.on = on
+                chip.glass.selectTo(on, animate)
             }
         }
-        durationButtons[sec] = btn
-        cell.addView(btn, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER))
-        cell.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        return cell
     }
 
     // ── Диалог кастомной длительности ───────────────────────────────────────
@@ -365,49 +465,42 @@ class TilePrefsActivity : Activity() {
 
     // ── Кнопки действий ─────────────────────────────────────────────────────
 
-    private fun buildActionButton(label: String, onClick: () -> Unit): TextView =
-        TextView(this).apply {
+    /** Главная кнопка: акцентная заливка с объёмом и свечением. */
+    private fun buildPrimaryButton(label: String, onClick: () -> Unit): TextView {
+        val glass = GlassDrawable(den(), colAccent, dpf(22f), dpf(22f), dpf(4f), selected = true)
+        return TextView(this).apply {
             text = label
-            textSize = 15f
-            setTextColor(colText)
+            textSize = 16f
+            setTextColor(colOnAccent)
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(18).toFloat()
-            }
+            background = glass
             setOnClickListener { onClick() }
-        }
-
-    private fun buildGithubButton(): TextView =
-        TextView(this).apply {
-            text = "Исходный код на GitHub  ↗"
-            textSize = 15f
-            setTextColor(colAccent)
-            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(18).toFloat()
-            }
-            setOnClickListener {
-                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HaloPrefs.GITHUB_URL))) }
-                catch (_: ActivityNotFoundException) {}
-                finish()
-            }
-        }
-
-    // ── Длительность ────────────────────────────────────────────────────────
-
-    private fun refreshDurationButtons(selected: Int) {
-        durationButtons.forEach { (sec, tv) ->
-            val on = sec == selected
-            tv.setTextColor(if (on) colOnAccent else colText)
-            tv.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                if (on) setColor(colAccent)
-                else { setColor(colCard); setStroke(dp(1), colStroke) }
-            }
+            bounceOnTouch(0.95f, glass)
         }
     }
+
+    /** Вторичная кнопка: прозрачное стекло. */
+    private fun buildGlassButton(label: String, color: Int, onClick: () -> Unit): TextView {
+        val glass = GlassDrawable(den(), colAccent, dpf(22f), dpf(22f), dpf(4f))
+        return TextView(this).apply {
+            text = label
+            textSize = 15f
+            setTextColor(color)
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = glass
+            setOnClickListener { onClick() }
+            bounceOnTouch(0.95f, glass)
+        }
+    }
+
+    private fun buildGithubButton(): TextView =
+        buildGlassButton("Исходный код на GitHub  ↗", colAccent) {
+            try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HaloPrefs.GITHUB_URL))) }
+            catch (_: ActivityNotFoundException) {}
+            dismiss()
+        }
 
     // ── Музыкальные приложения ───────────────────────────────────────────────
 
@@ -460,8 +553,10 @@ class TilePrefsActivity : Activity() {
                 container.addView(text("Подходящие приложения не найдены", 13f, colDim))
                 return@launch
             }
-            apps.forEach { app ->
-                container.addView(buildMusicRow(app, states[app.pkg] ?: false))
+            apps.forEachIndexed { i, app ->
+                val row = buildMusicRow(app, states[app.pkg] ?: false)
+                container.addView(row)
+                row.enterFromBelow(i * 70L, dpf(14f))
             }
         }
     }
@@ -471,13 +566,9 @@ class TilePrefsActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                setColor(colCard); setStroke(dp(1), colStroke); cornerRadius = dp(12).toFloat()
-            }
+            background = GlassDrawable(den(), colAccent, dpf(18f), dpf(18f), 0f)
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(matchP, wrapC).apply { bottomMargin = dp(8) }
         }
 
         row.addView(ImageView(this).apply {
@@ -489,7 +580,7 @@ class TilePrefsActivity : Activity() {
             text = app.label
             textSize = 15f
             setTextColor(colText)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }, LinearLayout.LayoutParams(0, wrapC, 1f))
 
         val toggle = Switch(this).apply {
             isChecked = initialEnabled
@@ -502,9 +593,7 @@ class TilePrefsActivity : Activity() {
                 applyMusicToggle(app.pkg, checked, this)
             }
         }
-        row.addView(toggle, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        row.addView(toggle, LinearLayout.LayoutParams(wrapC, wrapC))
         return row
     }
 
@@ -530,8 +619,6 @@ class TilePrefsActivity : Activity() {
             textSize = size
             setTextColor(color)
             if (bold) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            layoutParams = LinearLayout.LayoutParams(matchP, wrapC)
         }
 }

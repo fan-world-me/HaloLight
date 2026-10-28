@@ -18,7 +18,7 @@ Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder 
 
 ## What is in this repository?
 
-- **HaloLight Android app** — Kotlin app with a Quick Settings tile, a short rainbow animation, an animation-duration selector, and per-app switches for the system's music-reactive ring effect.
+- **HaloLight Android app** — Kotlin app with a Quick Settings tile, a short rainbow animation, an animation-duration selector, a ring brightness slider, and per-app switches for the system's music-reactive ring effect.
 - **Binder/API research** — findings from inspecting HyperOS framework code and testing calls on-device.
 - **Reference examples** — a minimal Shizuku Binder bridge and interface definitions for developers.
 - **Build & release automation** — GitHub Actions builds the APK and publishes a versioned GitHub Release.
@@ -28,11 +28,13 @@ Research into Xiaomi HyperOS's undocumented `miui.lights.ILightsManager` Binder 
 - Toggle the system HaloLight/strip lighting setting from a Quick Settings tile.
 - Run a rainbow animation on HaloLight.
 - Choose animation duration: **3, 5, 10, 15, or 30 seconds** (default: 5 seconds), or a custom value.
+- **Ring brightness slider:** the long-press menu has a brightness slider that drives the same system setting as *Settings → Lighting effects → Brightness* (`lamp_effect_brightness`, 80–255). The ring follows your finger in real time, and both the rainbow animation and the system's rhythm effects use the chosen brightness. The system's white preview flash is cleared as soon as you let go, and rhythm lighting is restarted. Details in [docs/BRIGHTNESS.md](docs/BRIGHTNESS.md).
 - **Rhythm lighting per app:** the long-press tile menu lists the installed music apps (Spotify, YouTube Music — the ReVanced build takes priority over the stock one — and SoundCloud) with a switch each. Turning a switch on enables the system's built-in music-reactive ring effect for that app. Details in [docs/RHYTHM.md](docs/RHYTHM.md).
+- **Redesigned menu:** glass-style translucent buttons with depth (gloss, rim light, shadow), spring press animations, duration chips that morph from a circle into a glowing rounded square when selected, a system-style brightness slider with an animated sun, a rotating rainbow ring in the header, and a staggered entrance. The look is inspired by Material 3 Expressive and is drawn in code, with no extra UI dependencies.
 - Open the source repository from the app's settings.
 - Uses Shizuku as a shell/Binder bridge; **root is not required**.
 
-The animation uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3`. Rhythm lighting does not use Binder at all: it flips the system's per-app switch through `AudioManager.getParameters` / `setParameters` (key `Get_/Set_MusicLight_Package_State`) from the app's own process. The system lighting toggle and the animated color routines are device- and firmware-dependent.
+The animation uses the `miui.lights.ILightsManager` Binder service and the `setColorCommon` transaction with `styleType = 3`. Rhythm lighting does not use Binder at all: it flips the system's per-app switch through `AudioManager.getParameters` / `setParameters` (key `Get_/Set_MusicLight_Package_State`) from the app's own process. Brightness is a plain `Settings.Global` integer written with `WRITE_SECURE_SETTINGS` or, if the app has not been granted it, through the Shizuku shell. The system lighting toggle and the animated color routines are device- and firmware-dependent.
 
 ## Download
 
@@ -52,8 +54,12 @@ The automated release workflow names APKs like `HaloLight-v2.0.<n>.apk`, where `
 2. Install HaloLight from Releases.
 3. Open HaloLight once and tap **Request Shizuku access**; approve the request in Shizuku.
 4. Add **HaloLight** to Quick Settings (edit tiles in the notification shade).
-5. Tap the tile to toggle the system lighting setting. Long-press the tile to open the menu with duration settings and the rhythm switches.
+5. Tap the tile to toggle the system lighting setting. Long-press the tile to open the menu with the brightness slider, duration settings and the rhythm switches.
 6. To run the rainbow animation, open HaloLight and choose **Start animation**. The app uses a foreground service while the animation runs.
+7. Optional: grant the app `WRITE_SECURE_SETTINGS` once for faster brightness writes (otherwise it goes through the Shizuku shell):
+   ```bash
+   adb shell pm grant dev.fanworld.halolite android.permission.WRITE_SECURE_SETTINGS
+   ```
 
 If the tile or animation does not work, confirm that Shizuku is running, HaloLight has permission, and your firmware exposes the expected system service. HyperOS may restrict or change this API on different builds.
 
@@ -68,6 +74,15 @@ audioManager.setParameters("Set_MusicLight_Package_State=$pkg:true")
 ```
 
 The write throws a `SecurityException` about `WRITE_SECURE_SETTINGS` on the test device but still takes effect, so re-read the state to confirm. Raw `service call media.audio_flinger ...` from the shell does **not** work for this. Full write-up: [docs/RHYTHM.md](docs/RHYTHM.md).
+
+## Ring brightness at a glance
+
+```bash
+rish -c "settings get global lamp_effect_brightness"        # 80..255
+rish -c "settings put global lamp_effect_brightness 130"
+```
+
+The lights service puts this value into the alpha byte of every colour it sends to the ring, so custom animations and rhythm effects follow it. Changing it makes the ring flash white for about 5 seconds and interrupts the current effect; HaloLight clears the flash and restarts rhythm lighting after you release the slider. Full write-up: [docs/BRIGHTNESS.md](docs/BRIGHTNESS.md).
 
 ## Build from source
 
@@ -113,15 +128,28 @@ Workflow: [Build & Release](.github/workflows/release.yml)
 - If `KEYSTORE_BASE64` is configured in repository Actions secrets, the workflow decodes it and uses `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` for signing.
 - If no keystore secret is configured, the APK is debug-signed.
 - Publishes the generated APK as a GitHub Release.
+- Two code pushes in quick succession can race for the same version number and fail the second run; push related changes as a single commit.
 
 ## Repository layout
 
 ```text
 .
 ├── app/                         # HaloLight Android application
+│   └── src/main/java/dev/fanworld/halolite/
+│       ├── TilePrefsActivity.kt        # long-press menu
+│       ├── BrightnessSliderView.kt     # system-style brightness slider + animated sun
+│       ├── GlassDrawable.kt            # glass buttons with depth and shape morphing
+│       ├── HaloRingView.kt             # header logo with rotating rainbow ring
+│       ├── Motion.kt                   # spring press and entrance animations
+│       ├── RingBrightness.kt           # lamp_effect_brightness read/write + flash recovery
+│       ├── MusicLightManager.kt        # per-app rhythm lighting
+│       ├── LightService.kt             # rainbow animation
+│       ├── LightsBinder.kt             # ILightsManager Binder client
+│       └── StripLight.kt               # main lighting switch
 ├── docs/
 │   ├── API.md                   # ILightsManager methods and parameters
 │   ├── BINDER.md                # Binder service access and details
+│   ├── BRIGHTNESS.md            # Ring brightness (lamp_effect_brightness)
 │   ├── FINDINGS.md              # Tested behavior and limitations
 │   ├── RESEARCH.md              # Research tools and methodology
 │   ├── RHYTHM.md                # Per-app rhythm lighting (AudioManager API)
@@ -145,6 +173,7 @@ The system API is undocumented and its behavior is firmware-specific. The resear
 - [Binder internals](docs/BINDER.md)
 - [Findings and known limitations](docs/FINDINGS.md)
 - [Rhythm lighting (per-app music-reactive ring)](docs/RHYTHM.md)
+- [Ring brightness (lamp_effect_brightness)](docs/BRIGHTNESS.md)
 - [Research methodology](docs/RESEARCH.md)
 - [Timeline](docs/TIMELINE.md)
 
